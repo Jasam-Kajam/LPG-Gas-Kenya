@@ -5,16 +5,15 @@
 // ============================================================
 
 import {
-  db,
-  auth,
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  limit,
-  onAuthStateChanged
+db,
+auth,
+collection,
+getDocs,
+query,
+orderBy,
+limit,
+onAuthStateChanged
 } from "./firebase.js";
-
 
 // ============================================================
 // CONFIGURATION
@@ -22,38 +21,34 @@ import {
 
 const LISTINGS_COLLECTION = "listings";
 const CART_KEY = "gashubke_cart";
-const LISTINGS_CACHE_KEY = "gashubke_listings_cache";
 const MAX_LISTINGS = 100;
-
 
 // ============================================================
 // DOM HELPERS
 // ============================================================
 
 const $ = (selector, parent = document) =>
-  parent.querySelector(selector);
+parent.querySelector(selector);
 
 const $$ = (selector, parent = document) =>
-  [...parent.querySelectorAll(selector)];
-
+[...parent.querySelectorAll(selector)];
 
 // ============================================================
 // SECURITY / HTML HELPERS
 // ============================================================
 
 function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+return String(value ?? "")
+.replace(/&/g, "&")
+.replace(/</g, "<")
+.replace(/>/g, ">")
+.replace(/"/g, """)
+.replace(/'/g, "'");
 }
 
 function escapeAttr(value) {
-  return escapeHtml(value);
+return escapeHtml(value);
 }
-
 
 // ============================================================
 // STATE
@@ -63,923 +58,520 @@ let allListings = [];
 let filteredListings = [];
 
 let currentFilters = {
-  search: "",
-  county: "",
-  brand: "",
-  size: ""
+search: "",
+county: "",
+brand: "",
+size: ""
 };
-
-
-// ============================================================
-// APP LOADER
-// ============================================================
-
-function hideAppLoader() {
-  const loader = $("#app-loader");
-
-  if (!loader) return;
-
-  loader.style.opacity = "0";
-  loader.style.pointerEvents = "none";
-
-  setTimeout(() => {
-    loader.remove();
-  }, 200);
-}
-
 
 // ============================================================
 // CART
 // ============================================================
 
 function getCart() {
-  try {
-    const cart = JSON.parse(
-      localStorage.getItem(CART_KEY)
-    );
-
-    return Array.isArray(cart) ? cart : [];
-
-  } catch {
-    return [];
-  }
+try {
+const cart = JSON.parse(localStorage.getItem(CART_KEY));
+return Array.isArray(cart) ? cart : [];
+} catch {
+return [];
 }
-
+}
 
 function saveCart(cart) {
-  try {
-    localStorage.setItem(
-      CART_KEY,
-      JSON.stringify(cart)
-    );
-  } catch (error) {
-    console.warn("Unable to save cart:", error);
-  }
-
-  updateCartBadge();
+localStorage.setItem(CART_KEY, JSON.stringify(cart));
+updateCartBadge();
 }
-
 
 function updateCartBadge() {
-  const cart = getCart();
+const cart = getCart();
 
-  const count = cart.reduce(
-    (total, item) =>
-      total + Number(item.quantity || 1),
-    0
-  );
+const count = cart.reduce(
+(total, item) => total + Number(item.quantity || 1),
+0
+);
 
-  const badges = [
-    "#cartCount",
-    "#cartBadge",
-    ".cart-count",
-    "[data-cart-count]"
-  ];
+const badges = [
+"#cartCount",
+"#cartBadge",
+".cart-count",
+"[data-cart-count]"
+];
 
-  badges.forEach(selector => {
-
-    $$(selector).forEach(element => {
-
-      element.textContent = count;
-
-      element.style.display =
-        count > 0 ? "" : "none";
-
-    });
-
-  });
+badges.forEach(selector => {
+$$(selector).forEach(element => {
+element.textContent = count;
+element.style.display = count > 0 ? "" : "none";
+});
+});
 }
-
-
-// ============================================================
-// CART ITEM BUILDER
-// ============================================================
-
-function createCartItem(listing) {
-  return {
-    listingId: listing.id,
-    title: listing.title,
-    category: listing.category,
-    description: listing.description,
-    images: listing.images,
-    location: listing.location,
-    listingLocation: listing.location,
-    price: Number(listing.price || 0),
-    size: listing.size,
-    vendorId: listing.vendorId,
-    vendorName: listing.vendorName,
-    quantity: 1
-  };
-}
-
 
 // ============================================================
 // ADD TO CART
 // ============================================================
 
 function addToCart(listing) {
+const cart = getCart();
 
-  const cart = getCart();
+const existing = cart.find(
+item => item.listingId === listing.id
+);
 
-  const existing = cart.find(
-    item => item.listingId === listing.id
-  );
-
-  if (existing) {
-
-    existing.quantity =
-      Number(existing.quantity || 1) + 1;
-
-  } else {
-
-    cart.push(
-      createCartItem(listing)
-    );
-
-  }
-
-  saveCart(cart);
-
-  showMessage(
-    `${listing.title || "Product"} added to your cart.`,
-    "success"
-  );
+if (existing) {
+existing.quantity = Number(existing.quantity || 1) + 1;
+} else {
+cart.push({
+listingId: listing.id,
+title: listing.title,
+category: listing.category,
+description: listing.description,
+images: listing.images,
+location: listing.location,
+listingLocation: listing.location,
+price: Number(listing.price || 0),
+size: listing.size,
+vendorId: listing.vendorId,
+vendorName: listing.vendorName,
+quantity: 1
+});
 }
 
+saveCart(cart);
+
+showMessage(
+${listing.title || "Product"} added to your cart.,
+"success"
+);
+}
 
 // ============================================================
 // BUY NOW
 // ============================================================
 
 function buyNow(listing) {
+const cart = getCart();
 
-  const cart = getCart();
+const existing = cart.find(
+item => item.listingId === listing.id
+);
 
-  const existing = cart.find(
-    item => item.listingId === listing.id
-  );
-
-  if (existing) {
-
-    existing.quantity =
-      Number(existing.quantity || 1) + 1;
-
-  } else {
-
-    cart.push(
-      createCartItem(listing)
-    );
-
-  }
-
-  saveCart(cart);
-
-  window.location.href =
-    "/checkout.html";
+if (existing) {
+existing.quantity = Number(existing.quantity || 1) + 1;
+} else {
+cart.push({
+listingId: listing.id,
+title: listing.title,
+category: listing.category,
+description: listing.description,
+images: listing.images,
+location: listing.location,
+listingLocation: listing.location,
+price: Number(listing.price || 0),
+size: listing.size,
+vendorId: listing.vendorId,
+vendorName: listing.vendorName,
+quantity: 1
+});
 }
 
+saveCart(cart);
+
+window.location.href = "/checkout.html";
+}
 
 // ============================================================
 // NORMALIZE FIRESTORE LISTING
 // ============================================================
 
 function normalizeListing(docSnap) {
+const data = docSnap.data() || {};
 
-  const data = docSnap.data() || {};
+let images = [];
 
-  let images = [];
-
-  if (Array.isArray(data.images)) {
-
-    images =
-      data.images
-        .filter(Boolean)
-        .map(String);
-
-  }
-
-  // Support a single image field
-  if (!images.length && data.image) {
-    images = [String(data.image)];
-  }
-
-  return {
-
-    id: docSnap.id,
-
-    title:
-      data.title ||
-      data.name ||
-      "LPG Gas Product",
-
-    category:
-      data.category ||
-      "LPG",
-
-    description:
-      data.description ||
-      "",
-
-    images,
-
-    location:
-      data.location ||
-      data.county ||
-      "Kenya",
-
-    price:
-      Number(data.price || 0),
-
-    size:
-      data.size ||
-      "",
-
-    vendorId:
-      data.vendorId ||
-      "",
-
-    vendorName:
-      data.vendorName ||
-      data.supplierName ||
-      "Verified GasHubKE Supplier",
-
-    createdAt:
-      data.createdAt || null
-
-  };
+if (Array.isArray(data.images)) {
+images = data.images.filter(Boolean);
 }
 
-
-// ============================================================
-// LOCAL CACHE
-// ============================================================
-
-function saveListingsCache(listings) {
-
-  try {
-
-    localStorage.setItem(
-      LISTINGS_CACHE_KEY,
-      JSON.stringify(listings)
-    );
-
-  } catch (error) {
-
-    console.warn(
-      "Unable to cache listings:",
-      error
-    );
-
-  }
+// Support a possible single image field as well
+if (!images.length && data.image) {
+images = [data.image];
 }
 
+return {
+id: docSnap.id,
 
-function getListingsCache() {
+title:  
+  data.title ||  
+  data.name ||  
+  "LPG Gas Product",  
 
-  try {
+category:  
+  data.category ||  
+  "LPG",  
 
-    const cached =
-      localStorage.getItem(
-        LISTINGS_CACHE_KEY
-      );
+description:  
+  data.description ||  
+  "",  
 
-    if (!cached) return [];
+images,  
 
-    const listings =
-      JSON.parse(cached);
+location:  
+  data.location ||  
+  data.county ||  
+  "Kenya",  
 
-    return Array.isArray(listings)
-      ? listings
-      : [];
+price:  
+  Number(data.price || 0),  
 
-  } catch {
+size:  
+  data.size ||  
+  "",  
 
-    return [];
+vendorId:  
+  data.vendorId ||  
+  "",  
 
-  }
+vendorName:  
+  data.vendorName ||  
+  data.supplierName ||  
+  "Verified GasHubKE Supplier",  
+
+createdAt:  
+  data.createdAt || null
+
+};
 }
 
-
 // ============================================================
-// LOAD CACHED LISTINGS
-// ============================================================
-
-function loadCachedListings() {
-
-  const cached =
-    getListingsCache();
-
-  if (!cached.length) {
-    return false;
-  }
-
-  allListings = cached;
-
-  filteredListings =
-    [...allListings];
-
-  populateCountyFilter(
-    allListings
-  );
-
-  populateBrandFilter(
-    allListings
-  );
-
-  populateSizeFilter(
-    allListings
-  );
-
-  renderListings(
-    filteredListings
-  );
-
-  return true;
-}
-
-
-// ============================================================
-// LOAD LISTINGS FROM FIRESTORE
+// LOAD LISTINGS
 // ============================================================
 
 async function loadListings() {
+const grid = getProductsGrid();
 
-  const grid =
-    getProductsGrid();
+showLoading(grid);
 
-  if (!grid) {
+try {
+const listingsRef = collection(
+db,
+LISTINGS_COLLECTION
+);
 
-    console.warn(
-      "Products grid not found."
-    );
+let snapshot;  
 
-    hideAppLoader();
+// First try newest listings first  
+try {  
+  const listingsQuery = query(  
+    listingsRef,  
+    orderBy("createdAt", "desc"),  
+    limit(MAX_LISTINGS)  
+  );  
 
-    return;
+  snapshot = await getDocs(listingsQuery);  
 
-  }
+} catch (orderedError) {  
+  console.warn(  
+    "Ordered listings query failed. Using fallback:",  
+    orderedError  
+  );  
 
+  const fallbackQuery = query(  
+    listingsRef,  
+    limit(MAX_LISTINGS)  
+  );  
 
-  // ----------------------------------------------------------
-  // Show cached products immediately if available
-  // ----------------------------------------------------------
+  snapshot = await getDocs(fallbackQuery);  
+}  
 
-  const hasCachedListings =
-    loadCachedListings();
+allListings = snapshot.docs.map(normalizeListing);  
 
+filteredListings = [...allListings];  
 
-  // Only show loading state when there is no cache
-  if (!hasCachedListings) {
-    showLoading(grid);
-  }
+populateCountyFilter(allListings);  
+populateBrandFilter(allListings);  
+populateSizeFilter(allListings);  
 
+renderListings(filteredListings);
 
-  try {
+} catch (error) {
+console.error("Unable to load listings:", error);
 
-    const listingsRef =
-      collection(
-        db,
-        LISTINGS_COLLECTION
-      );
+showError(  
+  grid,  
+  "Unable to load gas listings. Please refresh the page and try again."  
+);
 
-
-    let snapshot;
-
-
-    // --------------------------------------------------------
-    // First try newest listings
-    // --------------------------------------------------------
-
-    try {
-
-      const listingsQuery =
-        query(
-          listingsRef,
-          orderBy(
-            "createdAt",
-            "desc"
-          ),
-          limit(
-            MAX_LISTINGS
-          )
-        );
-
-      snapshot =
-        await getDocs(
-          listingsQuery
-        );
-
-    } catch (orderedError) {
-
-      console.warn(
-        "Ordered listings query failed. Using fallback:",
-        orderedError
-      );
-
-
-      // ------------------------------------------------------
-      // Fallback query
-      // ------------------------------------------------------
-
-      const fallbackQuery =
-        query(
-          listingsRef,
-          limit(
-            MAX_LISTINGS
-          )
-        );
-
-      snapshot =
-        await getDocs(
-          fallbackQuery
-        );
-
-    }
-
-
-    // --------------------------------------------------------
-    // Normalize
-    // --------------------------------------------------------
-
-    const freshListings =
-      snapshot.docs.map(
-        normalizeListing
-      );
-
-
-    allListings =
-      freshListings;
-
-
-    filteredListings =
-      [...allListings];
-
-
-    // --------------------------------------------------------
-    // Cache
-    // --------------------------------------------------------
-
-    saveListingsCache(
-      allListings
-    );
-
-
-    // --------------------------------------------------------
-    // Filters
-    // --------------------------------------------------------
-
-    populateCountyFilter(
-      allListings
-    );
-
-    populateBrandFilter(
-      allListings
-    );
-
-    populateSizeFilter(
-      allListings
-    );
-
-
-    // --------------------------------------------------------
-    // Render
-    // --------------------------------------------------------
-
-    renderListings(
-      filteredListings
-    );
-
-
-  } catch (error) {
-
-    console.error(
-      "Unable to load listings:",
-      error
-    );
-
-
-    // If cached listings exist, keep showing them
-    if (!allListings.length) {
-
-      showError(
-        grid,
-        "Unable to load gas listings. Please refresh the page and try again."
-      );
-
-    }
-
-  } finally {
-
-    // Never leave the full-screen loader stuck
-    hideAppLoader();
-
-  }
 }
-
+}
 
 // ============================================================
 // GET PRODUCT GRID
 // ============================================================
 
 function getProductsGrid() {
-
-  return (
-
-    $("#productsGrid") ||
-
-    $("#listingsGrid") ||
-
-    $("#productGrid") ||
-
-    $(".products-grid")
-
-  );
-
+return (
+$("#productsGrid") ||
+$("#listingsGrid") ||
+$("#productGrid") ||
+$(".products-grid")
+);
 }
-
 
 // ============================================================
 // RENDER LISTINGS
 // ============================================================
 
 function renderListings(listings) {
+const grid = getProductsGrid();
 
-  const grid =
-    getProductsGrid();
+if (!grid) {
+console.warn(
+"Products grid not found. Expected #productsGrid."
+);
+return;
+}
 
+if (!listings.length) {
+grid.innerHTML =   <div class="col-12">   <div class="empty-products">   <i class="bi bi-fire"></i>   <h4>No gas listings found</h4>   <p>   Try changing your search or filters.   </p>   </div>   </div>  ;
 
-  if (!grid) {
-
-    console.warn(
-      "Products grid not found. Expected #productsGrid."
-    );
-
-    return;
-
-  }
-
-
-  if (!listings.length) {
-
-    grid.innerHTML = `
-
-      <div class="col-12">
-
-        <div class="empty-products">
-
-          <i class="bi bi-fire"></i>
-
-          <h4>
-            No gas listings found
-          </h4>
-
-          <p>
-            Try changing your search or filters.
-          </p>
-
-        </div>
-
-      </div>
-
-    `;
-
-
-    updateResultsCount(
-      0
-    );
-
-    return;
-
-  }
-
-
-  grid.innerHTML =
-    listings
-      .map(renderListingCard)
-      .join("");
-
-
-  updateResultsCount(
-    listings.length
-  );
+updateResultsCount(0);  
+return;
 
 }
 
+grid.innerHTML = listings
+.map(renderListingCard)
+.join("");
+
+updateResultsCount(listings.length);
+}
 
 // ============================================================
 // PRODUCT CARD
 // ============================================================
 
 function renderListingCard(item) {
+const image =
+Array.isArray(item.images) &&
+item.images.length
+? item.images[0]
+: "/assets/images/favicon.svg";
 
-  const image =
+const price = Number(item.price || 0)
+.toLocaleString("en-KE");
 
-    Array.isArray(item.images) &&
-    item.images.length
+const title = escapeHtml(
+item.title || "LPG Gas Cylinder"
+);
 
-      ? item.images[0]
+const category = escapeHtml(
+item.category || "LPG"
+);
 
-      : "/assets/images/favicon.svg";
+const supplier = escapeHtml(
+item.vendorName ||
+"Verified GasHubKE Supplier"
+);
 
+const location = escapeHtml(
+item.location || "Kenya"
+);
 
-  const price =
-    Number(item.price || 0)
-      .toLocaleString("en-KE");
+const size = escapeHtml(
+item.size || ""
+);
 
+return `
+<div class="col-lg-4 col-md-6 mb-4">
 
-  const title =
-    escapeHtml(
-      item.title ||
-      "LPG Gas Cylinder"
-    );
+<article class="gashub-product-card">  
 
+    <!-- Product image -->  
+    <div class="product-image-wrap">  
 
-  const category =
-    escapeHtml(
-      item.category ||
-      "LPG"
-    );
+      <span class="product-badge">  
+        ${category}  
+      </span>  
 
+      <img  
+        src="${escapeAttr(image)}"  
+        alt="${escapeAttr(title)}"  
+        class="product-image"  
+        loading="lazy"  
+        onerror="this.onerror=null;this.src='/assets/images/favicon.svg';"  
+      >  
 
-  const supplier =
-    escapeHtml(
-      item.vendorName ||
-      "Verified GasHubKE Supplier"
-    );
-
-
-  const location =
-    escapeHtml(
-      item.location ||
-      "Kenya"
-    );
-
-
-  const size =
-    escapeHtml(
-      item.size ||
-      ""
-    );
-
-
-  return `
-
-    <div class="col-lg-4 col-md-6 mb-4">
-
-      <article class="gashub-product-card">
-
-        <div class="product-image-wrap">
-
-          <span class="product-badge">
-            ${category}
-          </span>
-
-          <img
-            src="${escapeAttr(image)}"
-            alt="${escapeAttr(title)}"
-            class="product-image"
-            loading="lazy"
-            decoding="async"
-            onerror="this.onerror=null;this.src='/assets/images/favicon.svg';"
-          >
-
-        </div>
+    </div>  
 
 
-        <div class="product-card-body">
+    <!-- Product information -->  
+    <div class="product-card-body">  
 
-          <h3 class="product-title">
-            ${title}
-          </h3>
-
-
-          <div class="product-supplier">
-
-            <i class="bi bi-shop"></i>
-
-            <span>
-              ${supplier}
-            </span>
-
-          </div>
+      <h3 class="product-title">  
+        ${title}  
+      </h3>  
 
 
-          <div class="product-location">
-
-            <i class="bi bi-geo-alt"></i>
-
-            <span>
-              ${location}
-            </span>
-
-          </div>
+      <div class="product-supplier">  
+        <i class="bi bi-shop"></i>  
+        <span>${supplier}</span>  
+      </div>  
 
 
-          ${
-            size
-              ? `
-
-                <div class="product-meta">
-
-                  <i class="bi bi-box-seam"></i>
-
-                  <span>
-                    ${size}
-                  </span>
-
-                </div>
-
-              `
-              : ""
-          }
+      <div class="product-location">  
+        <i class="bi bi-geo-alt"></i>  
+        <span>${location}</span>  
+      </div>  
 
 
-          <div class="product-bottom">
+      ${  
+        size  
+          ? `  
+            <div class="product-meta">  
+              <i class="bi bi-box-seam"></i>  
+              <span>${size}</span>  
+            </div>  
+          `  
+          : ""  
+      }  
 
-            <div class="product-price">
 
-              <small>KES</small>
+      <div class="product-bottom">  
 
-              ${price}
+        <div class="product-price">  
+          <small>KES</small>  
+          ${price}  
+        </div>  
 
-            </div>
 
+        <button  
+          type="button"  
+          class="buy-now-btn"  
+          data-buy-now="${escapeAttr(item.id)}"  
+        >  
+          <i class="bi bi-cart3"></i>  
+          Buy Now  
+        </button>  
 
-            <button
-              type="button"
-              class="buy-now-btn"
-              data-buy-now="${escapeAttr(item.id)}"
-            >
+      </div>  
 
-              <i class="bi bi-cart3"></i>
+    </div>  
 
-              Buy Now
+  </article>  
 
-            </button>
+</div>
 
-          </div>
-
-        </div>
-
-      </article>
-
-    </div>
-
-  `;
-
+`;
 }
-
 
 // ============================================================
 // FILTERING
 // ============================================================
 
 function applyFilters() {
+const search =
+currentFilters.search
+.trim()
+.toLowerCase();
 
-  const search =
-    currentFilters.search
-      .trim()
-      .toLowerCase();
+const county =
+currentFilters.county
+.trim()
+.toLowerCase();
 
+const brand =
+currentFilters.brand
+.trim()
+.toLowerCase();
 
-  const county =
-    currentFilters.county
-      .trim()
-      .toLowerCase();
+const size =
+currentFilters.size
+.trim()
+.toLowerCase();
 
+filteredListings = allListings.filter(item => {
 
-  const brand =
-    currentFilters.brand
-      .trim()
-      .toLowerCase();
-
-
-  const size =
-    currentFilters.size
-      .trim()
-      .toLowerCase();
-
-
-  filteredListings =
-    allListings.filter(item => {
-
-      const searchableText = [
-
-        item.title,
-        item.category,
-        item.description,
-        item.location,
-        item.vendorName,
-        item.size
-
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+const searchableText = [  
+  item.title,  
+  item.category,  
+  item.description,  
+  item.location,  
+  item.vendorName,  
+  item.size  
+]  
+  .filter(Boolean)  
+  .join(" ")  
+  .toLowerCase();  
 
 
-      const matchesSearch =
-        !search ||
-        searchableText.includes(
-          search
-        );
+const matchesSearch =  
+  !search ||  
+  searchableText.includes(search);  
 
 
-      const matchesCounty =
-        !county ||
-        String(
-          item.location || ""
-        )
-          .toLowerCase()
-          .includes(
-            county
-          );
+const matchesCounty =  
+  !county ||  
+  String(item.location || "")  
+    .toLowerCase()  
+    .includes(county);  
 
 
-      const matchesBrand =
-        !brand ||
-        [
-
-          item.title,
-          item.category,
-          item.description
-
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .toLowerCase()
-          .includes(
-            brand
-          );
+const matchesBrand =  
+  !brand ||  
+  [  
+    item.title,  
+    item.category,  
+    item.description  
+  ]  
+    .filter(Boolean)  
+    .join(" ")  
+    .toLowerCase()  
+    .includes(brand);  
 
 
-      const matchesSize =
-        !size ||
-        String(
-          item.size || ""
-        )
-          .toLowerCase()
-          .includes(
-            size
-          );
+const matchesSize =  
+  !size ||  
+  String(item.size || "")  
+    .toLowerCase()  
+    .includes(size);  
 
 
-      return (
+return (  
+  matchesSearch &&  
+  matchesCounty &&  
+  matchesBrand &&  
+  matchesSize  
+);
 
-        matchesSearch &&
-        matchesCounty &&
-        matchesBrand &&
-        matchesSize
+});
 
-      );
-
-    });
-
-
-  renderListings(
-    filteredListings
-  );
-
+renderListings(filteredListings);
 }
-
 
 // ============================================================
 // SEARCH
 // ============================================================
 
 function setupSearch() {
+const searchInput =
+$("#searchInput") ||
+$("#search") ||
+$('input[type="search"]');
 
-  const searchInput =
+if (!searchInput) return;
 
-    $("#searchInput") ||
+searchInput.addEventListener(
+"input",
+debounce(() => {
 
-    $("#search") ||
+currentFilters.search =  
+    searchInput.value;  
 
-    $('input[type="search"]');
+  applyFilters();  
 
+}, 250)
 
-  if (!searchInput) return;
-
-
-  searchInput.addEventListener(
-    "input",
-
-    debounce(
-      () => {
-
-        currentFilters.search =
-          searchInput.value;
-
-        applyFilters();
-
-      },
-      250
-    )
-
-  );
-
+);
 }
-
 
 // ============================================================
 // FILTER EVENTS
@@ -987,491 +579,319 @@ function setupSearch() {
 
 function setupFilters() {
 
-  const county =
-    $("#countyFilter") ||
-    $("#county");
+const county =
+$("#countyFilter") ||
+$("#county");
 
+const brand =
+$("#brandFilter") ||
+$("#brand");
 
-  const brand =
-    $("#brandFilter") ||
-    $("#brand");
+const size =
+$("#sizeFilter") ||
+$("#size");
 
+county?.addEventListener(
+"change",
+() => {
+currentFilters.county =
+county.value;
 
-  const size =
-    $("#sizeFilter") ||
-    $("#size");
-
-
-  county?.addEventListener(
-    "change",
-    () => {
-
-      currentFilters.county =
-        county.value;
-
-      applyFilters();
-
-    }
-  );
-
-
-  brand?.addEventListener(
-    "change",
-    () => {
-
-      currentFilters.brand =
-        brand.value;
-
-      applyFilters();
-
-    }
-  );
-
-
-  size?.addEventListener(
-    "change",
-    () => {
-
-      currentFilters.size =
-        size.value;
-
-      applyFilters();
-
-    }
-  );
-
-
-  const clearButton =
-
-    $("#clearFilters") ||
-
-    $("[data-clear-filters]");
-
-
-  clearButton?.addEventListener(
-    "click",
-
-    () => {
-
-      if (county)
-        county.value = "";
-
-      if (brand)
-        brand.value = "";
-
-      if (size)
-        size.value = "";
-
-
-      const searchInput =
-
-        $("#searchInput") ||
-
-        $("#search") ||
-
-        $('input[type="search"]');
-
-
-      if (searchInput) {
-        searchInput.value = "";
-      }
-
-
-      currentFilters = {
-
-        search: "",
-        county: "",
-        brand: "",
-        size: ""
-
-      };
-
-
-      renderListings(
-        allListings
-      );
-
-    }
-
-  );
-
+applyFilters();  
 }
 
+);
+
+brand?.addEventListener(
+"change",
+() => {
+currentFilters.brand =
+brand.value;
+
+applyFilters();  
+}
+
+);
+
+size?.addEventListener(
+"change",
+() => {
+currentFilters.size =
+size.value;
+
+applyFilters();  
+}
+
+);
+
+// Clear filters button
+const clearButton =
+$("#clearFilters") ||
+$("[data-clear-filters]");
+
+clearButton?.addEventListener(
+"click",
+() => {
+
+if (county) county.value = "";  
+  if (brand) brand.value = "";  
+  if (size) size.value = "";  
+
+  const searchInput =  
+    $("#searchInput") ||  
+    $("#search") ||  
+    $('input[type="search"]');  
+
+  if (searchInput) {  
+    searchInput.value = "";  
+  }  
+
+  currentFilters = {  
+    search: "",  
+    county: "",  
+    brand: "",  
+    size: ""  
+  };  
+
+  renderListings(allListings);  
+}
+
+);
+}
 
 // ============================================================
-// POPULATE COUNTY FILTER
+// POPULATE FILTERS
 // ============================================================
 
 function populateCountyFilter(listings) {
 
-  const select =
-    $("#countyFilter") ||
-    $("#county");
+const select =
+$("#countyFilter") ||
+$("#county");
 
+if (!select) return;
 
-  if (!select) return;
+const current =
+select.value;
 
+const locations = [
+...new Set(
+listings
+.map(item => item.location)
+.filter(Boolean)
+)
+].sort();
 
-  const current =
-    select.value;
+// Keep the existing first option
+const firstOption =
+select.querySelector("option:first-child");
 
+select.innerHTML = "";
 
-  const firstOption =
-    select.querySelector(
-      "option:first-child"
-    );
+const defaultOption =
+document.createElement("option");
 
+defaultOption.value = "";
+defaultOption.textContent =
+firstOption?.textContent ||
+"All Locations";
 
-  const locations = [
+select.appendChild(defaultOption);
 
-    ...new Set(
+locations.forEach(location => {
 
-      listings
+const option =  
+  document.createElement("option");  
 
-        .map(
-          item => item.location
-        )
+option.value = location;  
+option.textContent = location;  
 
-        .filter(Boolean)
+select.appendChild(option);
 
-    )
+});
 
-  ].sort();
-
-
-  select.innerHTML = "";
-
-
-  const defaultOption =
-    document.createElement(
-      "option"
-    );
-
-
-  defaultOption.value = "";
-
-
-  defaultOption.textContent =
-
-    firstOption?.textContent ||
-
-    "All Locations";
-
-
-  select.appendChild(
-    defaultOption
-  );
-
-
-  locations.forEach(
-    location => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        location;
-
-      option.textContent =
-        location;
-
-      select.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  select.value =
-    current;
-
+select.value = current;
 }
-
-
-// ============================================================
-// POPULATE BRAND FILTER
-// ============================================================
 
 function populateBrandFilter(listings) {
 
-  const select =
-    $("#brandFilter") ||
-    $("#brand");
+const select =
+$("#brandFilter") ||
+$("#brand");
 
+if (!select) return;
 
-  if (!select) return;
+const current =
+select.value;
 
+const brands = [
+...new Set(
+listings
+.map(item => item.category)
+.filter(Boolean)
+)
+].sort();
 
-  const current =
-    select.value;
+const firstOption =
+select.querySelector("option:first-child");
 
+select.innerHTML = "";
 
-  const firstOption =
-    select.querySelector(
-      "option:first-child"
-    );
+const defaultOption =
+document.createElement("option");
 
+defaultOption.value = "";
 
-  const brands = [
+defaultOption.textContent =
+firstOption?.textContent ||
+"All Categories";
 
-    ...new Set(
+select.appendChild(defaultOption);
 
-      listings
+brands.forEach(brand => {
 
-        .map(
-          item => item.category
-        )
+const option =  
+  document.createElement("option");  
 
-        .filter(Boolean)
+option.value = brand;  
+option.textContent = brand;  
 
-    )
+select.appendChild(option);
 
-  ].sort();
+});
 
-
-  select.innerHTML = "";
-
-
-  const defaultOption =
-    document.createElement(
-      "option"
-    );
-
-
-  defaultOption.value = "";
-
-
-  defaultOption.textContent =
-
-    firstOption?.textContent ||
-
-    "All Categories";
-
-
-  select.appendChild(
-    defaultOption
-  );
-
-
-  brands.forEach(
-    brand => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        brand;
-
-      option.textContent =
-        brand;
-
-      select.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  select.value =
-    current;
-
+select.value = current;
 }
-
-
-// ============================================================
-// POPULATE SIZE FILTER
-// ============================================================
 
 function populateSizeFilter(listings) {
 
-  const select =
-    $("#sizeFilter") ||
-    $("#size");
+const select =
+$("#sizeFilter") ||
+$("#size");
 
+if (!select) return;
 
-  if (!select) return;
+const current =
+select.value;
 
+const sizes = [
+...new Set(
+listings
+.map(item => item.size)
+.filter(Boolean)
+)
+].sort();
 
-  const current =
-    select.value;
+const firstOption =
+select.querySelector("option:first-child");
 
+select.innerHTML = "";
 
-  const firstOption =
-    select.querySelector(
-      "option:first-child"
-    );
+const defaultOption =
+document.createElement("option");
 
+defaultOption.value = "";
 
-  const sizes = [
+defaultOption.textContent =
+firstOption?.textContent ||
+"All Sizes";
 
-    ...new Set(
+select.appendChild(defaultOption);
 
-      listings
+sizes.forEach(size => {
 
-        .map(
-          item => item.size
-        )
+const option =  
+  document.createElement("option");  
 
-        .filter(Boolean)
+option.value = size;  
+option.textContent = size;  
 
-    )
+select.appendChild(option);
 
-  ].sort();
+});
 
-
-  select.innerHTML = "";
-
-
-  const defaultOption =
-    document.createElement(
-      "option"
-    );
-
-
-  defaultOption.value = "";
-
-
-  defaultOption.textContent =
-
-    firstOption?.textContent ||
-
-    "All Sizes";
-
-
-  select.appendChild(
-    defaultOption
-  );
-
-
-  sizes.forEach(
-    size => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        size;
-
-      option.textContent =
-        size;
-
-      select.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  select.value =
-    current;
-
+select.value = current;
 }
 
-
 // ============================================================
-// BUY NOW / CART EVENTS
+// BUY NOW / CART BUTTON EVENTS
 // ============================================================
 
 function setupProductActions() {
 
-  document.addEventListener(
-    "click",
+document.addEventListener(
+"click",
+event => {
 
-    event => {
+const buyButton =  
+    event.target.closest(  
+      "[data-buy-now]"  
+    );  
 
-      const buyButton =
-        event.target.closest(
-          "[data-buy-now]"
-        );
-
-
-      if (!buyButton) return;
+  if (!buyButton) return;  
 
 
-      const listingId =
-        buyButton.dataset.buyNow;
+  const listingId =  
+    buyButton.dataset.buyNow;  
 
 
-      const listing =
-        allListings.find(
-          item =>
-            item.id === listingId
-        );
+  const listing =  
+    allListings.find(  
+      item => item.id === listingId  
+    );  
 
 
-      if (!listing) {
+  if (!listing) {  
+    showMessage(  
+      "This product is no longer available.",  
+      "danger"  
+    );  
 
-        showMessage(
-          "This product is no longer available.",
-          "danger"
-        );
-
-        return;
-
-      }
+    return;  
+  }  
 
 
-      buyNow(
-        listing
-      );
-
-    }
-
-  );
-
+  buyNow(listing);  
 }
 
+);
+}
 
 // ============================================================
-// ADD TO CART EVENTS
+// OPTIONAL ADD-TO-CART BUTTONS
 // ============================================================
 
 function setupCartActions() {
 
-  document.addEventListener(
-    "click",
+document.addEventListener(
+"click",
+event => {
 
-    event => {
+const button =  
+    event.target.closest(  
+      "[data-add-cart]"  
+    );  
 
-      const button =
-        event.target.closest(
-          "[data-add-cart]"
-        );
-
-
-      if (!button) return;
+  if (!button) return;  
 
 
-      const listingId =
-        button.dataset.addCart;
+  const listingId =  
+    button.dataset.addCart;  
 
 
-      const listing =
-        allListings.find(
-          item =>
-            item.id === listingId
-        );
+  const listing =  
+    allListings.find(  
+      item => item.id === listingId  
+    );  
 
 
-      if (listing) {
-        addToCart(listing);
-      }
-
-    }
-
-  );
-
+  if (listing) {  
+    addToCart(listing);  
+  }  
 }
 
+);
+}
 
 // ============================================================
 // AUTHENTICATION UI
@@ -1479,88 +899,65 @@ function setupCartActions() {
 
 function setupAuthUI() {
 
-  onAuthStateChanged(
-    auth,
+onAuthStateChanged(
+auth,
+user => {
 
-    user => {
-
-      const signInLinks =
-        $$(
-          '[data-auth="signin"], #signInLink'
-        );
-
-
-      const accountLinks =
-        $$(
-          '[data-auth="account"], #accountLink'
-        );
+const signInLinks =  
+    $$(  
+      '[data-auth="signin"], #signInLink'  
+    );  
 
 
-      const supplierLinks =
-        $$(
-          '[data-auth="supplier"], #supplierLink'
-        );
+  const accountLinks =  
+    $$(  
+      '[data-auth="account"], #accountLink'  
+    );  
 
 
-      if (user) {
-
-        signInLinks.forEach(
-          element => {
-            element.style.display =
-              "none";
-          }
-        );
+  const supplierLinks =  
+    $$(  
+      '[data-auth="supplier"], #supplierLink'  
+    );  
 
 
-        accountLinks.forEach(
-          element => {
-            element.style.display =
-              "";
-          }
-        );
+  if (user) {  
+
+    signInLinks.forEach(  
+      element =>  
+        element.style.display = "none"  
+    );  
 
 
-        supplierLinks.forEach(
-          element => {
-            element.style.display =
-              "";
-          }
-        );
+    accountLinks.forEach(  
+      element =>  
+        element.style.display = ""  
+    );  
 
 
-      } else {
+    supplierLinks.forEach(  
+      element =>  
+        element.style.display = ""  
+    );  
 
-        signInLinks.forEach(
-          element => {
-            element.style.display =
-              "";
-          }
-        );
+  } else {  
 
-
-        accountLinks.forEach(
-          element => {
-            element.style.display =
-              "none";
-          }
-        );
+    signInLinks.forEach(  
+      element =>  
+        element.style.display = ""  
+    );  
 
 
-        supplierLinks.forEach(
-          element => {
-            element.style.display =
-              "none";
-          }
-        );
+    accountLinks.forEach(  
+      element =>  
+        element.style.display = "none"  
+    );  
 
-      }
-
-    }
-
-  );
-
+  }  
 }
 
+);
+}
 
 // ============================================================
 // RESULTS COUNT
@@ -1568,27 +965,19 @@ function setupAuthUI() {
 
 function updateResultsCount(count) {
 
-  const elements =
-    $$(
-      "#resultsCount, [data-results-count]"
-    );
+const elements = $$(
+"#resultsCount, [data-results-count]"
+);
 
+elements.forEach(
+element => {
 
-  elements.forEach(
-    element => {
-
-      element.textContent =
-        `${count} ${
-          count === 1
-            ? "product"
-            : "products"
-        }`;
-
-    }
-  );
-
+element.textContent =  
+    `${count} ${count === 1 ? "product" : "products"}`;  
 }
 
+);
+}
 
 // ============================================================
 // LOADING STATE
@@ -1596,39 +985,30 @@ function updateResultsCount(count) {
 
 function showLoading(grid) {
 
-  if (!grid) return;
+if (!grid) return;
 
+grid.innerHTML = `
+<div class="col-12">
+<div class="text-center py-5">
 
-  grid.innerHTML = `
+<div  
+      class="spinner-border text-warning"  
+      role="status"  
+    >  
+      <span class="visually-hidden">  
+        Loading...  
+      </span>  
+    </div>  
 
-    <div class="col-12">
+    <p class="text-muted mt-3 mb-0">  
+      Loading gas listings...  
+    </p>  
 
-      <div class="text-center py-5">
+  </div>  
+</div>
 
-        <div
-          class="spinner-border text-warning"
-          role="status"
-        >
-
-          <span class="visually-hidden">
-            Loading...
-          </span>
-
-        </div>
-
-
-        <p class="text-muted mt-3 mb-0">
-          Loading gas listings...
-        </p>
-
-      </div>
-
-    </div>
-
-  `;
-
+`;
 }
-
 
 // ============================================================
 // ERROR STATE
@@ -1636,132 +1016,90 @@ function showLoading(grid) {
 
 function showError(grid, message) {
 
-  if (!grid) return;
+if (!grid) return;
 
+grid.innerHTML = `
+<div class="col-12">
 
-  grid.innerHTML = `
+<div class="alert alert-danger text-center">  
 
-    <div class="col-12">
+    <i class="bi bi-exclamation-triangle me-1"></i>  
 
-      <div class="alert alert-danger text-center">
+    ${escapeHtml(message)}  
 
-        <i class="bi bi-exclamation-triangle me-1"></i>
+  </div>  
 
-        ${escapeHtml(message)}
+</div>
 
-      </div>
-
-    </div>
-
-  `;
-
+`;
 }
-
 
 // ============================================================
 // MESSAGE / TOAST
 // ============================================================
 
-function showMessage(
-  message,
-  type = "success"
-) {
+function showMessage(message, type = "success") {
 
-  let toast =
-    $("#gashubToast");
+let toast =
+document.querySelector(
+"#gashubToast"
+);
 
+if (!toast) {
 
-  if (!toast) {
+toast =  
+  document.createElement("div");  
 
-    toast =
-      document.createElement(
-        "div"
-      );
+toast.id =  
+  "gashubToast";  
 
+toast.style.position =  
+  "fixed";  
 
-    toast.id =
-      "gashubToast";
+toast.style.right =  
+  "20px";  
 
+toast.style.bottom =  
+  "20px";  
 
-    toast.style.position =
-      "fixed";
+toast.style.zIndex =  
+  "99999";  
 
+toast.style.maxWidth =  
+  "360px";  
 
-    toast.style.right =
-      "20px";
-
-
-    toast.style.bottom =
-      "20px";
-
-
-    toast.style.zIndex =
-      "99999";
-
-
-    toast.style.maxWidth =
-      "360px";
-
-
-    document.body.appendChild(
-      toast
-    );
-
-  }
-
-
-  toast.innerHTML = `
-
-    <div
-      class="alert alert-${escapeAttr(type)} shadow mb-0"
-    >
-
-      ${escapeHtml(message)}
-
-    </div>
-
-  `;
-
-
-  setTimeout(
-    () => {
-
-      toast.innerHTML = "";
-
-    },
-    3500
-  );
+document.body.appendChild(toast);
 
 }
 
+toast.innerHTML =   <div class="alert alert-${escapeAttr(type)} shadow mb-0">   ${escapeHtml(message)}   </div>  ;
+
+setTimeout(() => {
+
+toast.innerHTML = "";
+
+}, 3500);
+}
 
 // ============================================================
 // DEBOUNCE
 // ============================================================
 
-function debounce(
-  callback,
-  delay = 250
-) {
+function debounce(callback, delay = 250) {
 
-  let timer;
+let timer;
 
+return (...args) => {
 
-  return (...args) => {
+clearTimeout(timer);  
 
-    clearTimeout(timer);
+timer = setTimeout(  
+  () => callback(...args),  
+  delay  
+);
 
-
-    timer =
-      setTimeout(
-        () => callback(...args),
-        delay
-      );
-
-  };
-
+};
 }
-
 
 // ============================================================
 // NAVIGATION
@@ -1769,112 +1107,89 @@ function debounce(
 
 function setupNavigation() {
 
-  $$(
-    '[data-link="supplier"]'
-  ).forEach(
-    button => {
+// Supplier dashboard
+$$(
+'[data-link="supplier"]'
+).forEach(button => {
 
-      button.addEventListener(
-        "click",
-        () => {
+button.addEventListener(  
+  "click",  
+  () => {  
+    window.location.href =  
+      "/supplier/";  
+  }  
+);
 
-          window.location.href =
-            "/supplier/";
+});
 
-        }
-      );
+// Cart
+$$(
+'[data-link="cart"], #cartLink'
+).forEach(button => {
 
-    }
-  );
+button.addEventListener(  
+  "click",  
+  () => {  
+    window.location.href =  
+      "/checkout.html";  
+  }  
+);
 
+});
 
-  $$(
-    '[data-link="cart"], #cartLink'
-  ).forEach(
-    button => {
+// Settings
+$$(
+'[data-link="settings"]'
+).forEach(button => {
 
-      button.addEventListener(
-        "click",
-        () => {
+button.addEventListener(  
+  "click",  
+  () => {  
+    window.location.href =  
+      "/settings/";  
+  }  
+);
 
-          window.location.href =
-            "/checkout.html";
-
-        }
-      );
-
-    }
-  );
-
-
-  $$(
-    '[data-link="settings"]'
-  ).forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          window.location.href =
-            "/settings/";
-
-        }
-      );
-
-    }
-  );
-
+});
 }
-
 
 // ============================================================
 // INITIALIZE MARKETPLACE
 // ============================================================
 
-function initMarketplace() {
+async function initMarketplace() {
 
-  // Make the basic interface usable immediately.
-  updateCartBadge();
+updateCartBadge();
 
-  setupSearch();
+setupSearch();
 
-  setupFilters();
+setupFilters();
 
-  setupProductActions();
+setupProductActions();
 
-  setupCartActions();
+setupCartActions();
 
-  setupAuthUI();
+setupAuthUI();
 
-  setupNavigation();
+setupNavigation();
 
-  // Remove full-screen loader immediately.
-  hideAppLoader();
-
-  // Firestore loads in the background.
-  // The page does NOT wait for it.
-  loadListings();
-
+await loadListings();
 }
-
 
 // ============================================================
 // START
 // ============================================================
 
 if (
-  document.readyState === "loading"
+document.readyState === "loading"
 ) {
 
-  document.addEventListener(
-    "DOMContentLoaded",
-    initMarketplace,
-    { once: true }
-  );
+document.addEventListener(
+"DOMContentLoaded",
+initMarketplace
+);
 
 } else {
 
-  initMarketplace();
-
+initMarketplace();
 }
