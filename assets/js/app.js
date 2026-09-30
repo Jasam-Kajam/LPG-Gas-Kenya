@@ -1,1591 +1,823 @@
-// ============================================================
-// GasHubKE Marketplace - app.js
-// Production marketplace logic
-// Firestore collection: listings
-// ============================================================
-
 import {
   db,
-  auth,
   collection,
   getDocs,
   query,
   orderBy,
   limit,
-  onAuthStateChanged
+  auth,
+  onAuthStateChanged,
+  signOut
 } from "./firebase.js";
 
+import { BRANDS, COUNTIES } from "./config.js";
 
-// ============================================================
-// CONFIGURATION
-// ============================================================
+const $ = (selector) => document.querySelector(selector);
 
-const LISTINGS_COLLECTION = "listings";
-const CART_KEY = "gashubke_cart";
-const MAX_LISTINGS = 100;
+const cart = JSON.parse(
+  localStorage.getItem("gashubke_cart") || "[]"
+);
 
+/* ================================
+   FILTER OPTIONS
+================================ */
 
-// ============================================================
-// DOM HELPERS
-// ============================================================
-
-const $ = (selector, parent = document) =>
-  parent.querySelector(selector);
-
-const $$ = (selector, parent = document) =>
-  [...parent.querySelectorAll(selector)];
-
-
-// ============================================================
-// SECURITY
-// ============================================================
-
-function escapeHtml(value) {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-}
-
-function escapeAttr(value) {
-  return escapeHtml(value);
-}
-
-
-// ============================================================
-// STATE
-// ============================================================
-
-let allListings = [];
-let filteredListings = [];
-
-let currentFilters = {
-  search: "",
-  county: "",
-  brand: "",
-  size: ""
-};
-
-
-// ============================================================
-// APP LOADER
-// ============================================================
-
-function hideAppLoader() {
-  const loader = document.getElementById("app-loader");
-
-  if (!loader) return;
-
-  loader.style.display = "none";
-}
-
-
-// ============================================================
-// CART
-// ============================================================
-
-function getCart() {
-  try {
-    const cart = JSON.parse(
-      localStorage.getItem(CART_KEY)
+if ($("#county")) {
+  COUNTIES.forEach((county) => {
+    $("#county").insertAdjacentHTML(
+      "beforeend",
+      `<option value="${esc(county)}">${esc(county)}</option>`
     );
-
-    return Array.isArray(cart) ? cart : [];
-  } catch {
-    return [];
-  }
-}
-
-
-function saveCart(cart) {
-  localStorage.setItem(
-    CART_KEY,
-    JSON.stringify(cart)
-  );
-
-  updateCartBadge();
-}
-
-
-function updateCartBadge() {
-  const cart = getCart();
-
-  const count = cart.reduce(
-    (total, item) =>
-      total + Number(item.quantity || 1),
-    0
-  );
-
-  [
-    "#cartCount",
-    "#cartBadge",
-    ".cart-count",
-    "[data-cart-count]"
-  ].forEach(selector => {
-
-    $$(selector).forEach(element => {
-
-      element.textContent = count;
-
-      element.style.display =
-        count > 0 ? "" : "none";
-
-    });
-
   });
 }
 
-
-// ============================================================
-// CART ITEM
-// ============================================================
-
-function createCartItem(listing) {
-  return {
-    listingId: listing.id,
-    title: listing.title,
-    category: listing.category,
-    description: listing.description,
-    images: listing.images,
-    location: listing.location,
-    listingLocation: listing.location,
-    price: Number(listing.price || 0),
-    size: listing.size,
-    vendorId: listing.vendorId,
-    vendorName: listing.vendorName,
-    quantity: 1
-  };
+if ($("#brand")) {
+  BRANDS.forEach((brand) => {
+    $("#brand").insertAdjacentHTML(
+      "beforeend",
+      `<option value="${esc(brand)}">${esc(brand)}</option>`
+    );
+  });
 }
 
+/* ================================
+   HELPERS
+================================ */
 
-// ============================================================
-// ADD TO CART
-// ============================================================
-
-function addToCart(listing) {
-
-  const cart = getCart();
-
-  const existing = cart.find(
-    item => item.listingId === listing.id
-  );
-
-  if (existing) {
-    existing.quantity =
-      Number(existing.quantity || 1) + 1;
-  } else {
-    cart.push(
-      createCartItem(listing)
-    );
-  }
-
-  saveCart(cart);
-
-  showMessage(
-    `${listing.title || "Product"} added to your cart.`,
-    "success"
+function money(value) {
+  return new Intl.NumberFormat("en-KE").format(
+    Number(value) || 0
   );
 }
 
-
-// ============================================================
-// BUY NOW
-// ============================================================
-
-function buyNow(listing) {
-
-  const cart = getCart();
-
-  const existing = cart.find(
-    item => item.listingId === listing.id
+function saveCart() {
+  localStorage.setItem(
+    "gashubke_cart",
+    JSON.stringify(cart)
   );
 
-  if (existing) {
-    existing.quantity =
-      Number(existing.quantity || 1) + 1;
-  } else {
-    cart.push(
-      createCartItem(listing)
-    );
-  }
-
-  saveCart(cart);
-
-  window.location.href =
-    "/checkout.html";
+  renderCartCount();
 }
 
+function renderCartCount() {
+  const countElement = $("#cartCount");
 
-// ============================================================
-// NORMALIZE LISTING
-// ============================================================
+  if (!countElement) return;
 
-function normalizeListing(docSnap) {
+  const count = cart.reduce(
+    (total, item) => total + Number(item.quantity || 0),
+    0
+  );
 
-  const data = docSnap.data() || {};
-
-  let images = [];
-
-  if (Array.isArray(data.images)) {
-    images = data.images.filter(Boolean);
-  }
-
-  if (!images.length && data.image) {
-    images = [data.image];
-  }
-
-  return {
-
-    id: docSnap.id,
-
-    title:
-      data.title ||
-      data.name ||
-      "LPG Gas Product",
-
-    category:
-      data.category ||
-      "LPG",
-
-    description:
-      data.description ||
-      "",
-
-    images,
-
-    location:
-      data.location ||
-      data.county ||
-      "Kenya",
-
-    price:
-      Number(data.price || 0),
-
-    size:
-      data.size ||
-      "",
-
-    vendorId:
-      data.vendorId ||
-      "",
-
-    vendorName:
-      data.vendorName ||
-      data.supplierName ||
-      "Verified GasHubKE Supplier",
-
-    createdAt:
-      data.createdAt || null
-  };
+  countElement.textContent = count;
 }
 
+function toast(message) {
+  const toastElement = $("#toast");
 
-// ============================================================
-// LOAD LISTINGS
-// ============================================================
-
-async function loadListings() {
-
-  const grid =
-    getProductsGrid();
-
-  if (!grid) {
-    console.error(
-      "GasHubKE: Products grid not found."
-    );
-
-    hideAppLoader();
+  if (!toastElement) {
+    alert(message);
     return;
   }
 
-  showLoading(grid);
+  const body = toastElement.querySelector(".toast-body");
 
+  if (body) {
+    body.textContent = message;
+  }
+
+  bootstrap.Toast
+    .getOrCreateInstance(toastElement)
+    .show();
+}
+
+function esc(value) {
+  return String(value ?? "").replace(
+    /[&<>"']/g,
+    (character) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[character])
+  );
+}
+
+/* ================================
+   LISTINGS
+================================ */
+
+let listings = [];
+
+/*
+  Convert your existing Firestore listing
+  structure into a consistent frontend
+  structure.
+*/
+function normalizeListing(doc) {
+  const data = doc.data();
+
+  return {
+    id: doc.id,
+
+    // Your Firestore fields
+    title: data.title || "LPG Gas",
+    category: data.category || "Cooking Gas",
+    description: data.description || "",
+    images: Array.isArray(data.images)
+      ? data.images
+      : [],
+
+    location: data.location || "",
+    price: Number(data.price) || 0,
+    size: data.size || "",
+
+    vendorId: data.vendorId || "",
+    vendorName: data.vendorName || "Gas Supplier",
+
+    createdAt: data.createdAt || null,
+
+    // Useful aliases for the cart/frontend
+    name: data.title || "LPG Gas",
+    brand: data.category || "LPG",
+    supplierName:
+      data.vendorName || "Gas Supplier",
+    county: data.location || ""
+  };
+}
+
+/* ================================
+   LOAD LISTINGS FROM FIRESTORE
+================================ */
+
+async function loadListings() {
   try {
-
-    console.log(
-      "GasHubKE: Loading listings..."
-    );
-
-    const listingsRef =
-      collection(
-        db,
-        LISTINGS_COLLECTION
-      );
+    /*
+      IMPORTANT:
+      Your marketplace collection is
+      "listings", NOT "products".
+    */
 
     let snapshot;
 
-
-    // ----------------------------------------------------------
-    // Try ordered query
-    // ----------------------------------------------------------
-
     try {
+      const listingsQuery = query(
+        collection(db, "listings"),
+        orderBy("createdAt", "desc"),
+        limit(100)
+      );
 
-      const listingsQuery =
-        query(
-          listingsRef,
-          orderBy(
-            "createdAt",
-            "desc"
-          ),
-          limit(
-            MAX_LISTINGS
-          )
-        );
+      snapshot = await getDocs(listingsQuery);
 
-      snapshot =
-        await getDocs(
-          listingsQuery
-        );
+    } catch (queryError) {
 
-    } catch (orderedError) {
+      /*
+        Fallback in case createdAt contains
+        mixed data types or the required
+        Firestore index is not available.
+      */
 
       console.warn(
-        "GasHubKE: Ordered query failed. Trying fallback query.",
-        orderedError
+        "Ordered listings query failed. Loading listings without ordering.",
+        queryError
       );
 
-      // --------------------------------------------------------
-      // Fallback
-      // --------------------------------------------------------
+      const fallbackQuery = query(
+        collection(db, "listings"),
+        limit(100)
+      );
 
-      const fallbackQuery =
-        query(
-          listingsRef,
-          limit(
-            MAX_LISTINGS
-          )
-        );
-
-      snapshot =
-        await getDocs(
-          fallbackQuery
-        );
+      snapshot = await getDocs(fallbackQuery);
     }
 
+    listings = snapshot.docs.map(normalizeListing);
 
-    console.log(
-      `GasHubKE: ${snapshot.size} listings loaded.`
-    );
-
-
-    allListings =
-      snapshot.docs.map(
-        normalizeListing
-      );
-
-
-    filteredListings =
-      [...allListings];
-
-
-    populateCountyFilter(
-      allListings
-    );
-
-    populateBrandFilter(
-      allListings
-    );
-
-    populateSizeFilter(
-      allListings
-    );
-
-
-    renderListings(
-      filteredListings
-    );
-
+    renderListings();
 
   } catch (error) {
 
     console.error(
-      "GasHubKE: Unable to load listings.",
+      "Unable to load marketplace listings:",
       error
     );
 
+    listings = [];
 
-    showError(
-      grid,
-      "Unable to load gas listings. Please refresh the page and try again."
+    renderListings();
+
+    toast(
+      "Unable to load listings. Please check your Firebase connection."
     );
-
 
   } finally {
 
-    hideAppLoader();
+    const loader = $("#app-loader");
 
+    if (loader) {
+      loader.remove();
+    }
   }
 }
 
+/* ================================
+   RENDER LISTINGS
+================================ */
 
-// ============================================================
-// GET PRODUCT GRID
-// ============================================================
+function renderListings() {
 
-function getProductsGrid() {
+  const container = $("#products");
 
-  return (
-    $("#productsGrid") ||
-    $("#listingsGrid") ||
-    $("#productGrid") ||
-    $(".products-grid")
-  );
+  if (!container) return;
 
-}
+  const searchTerm =
+    ($("#search")?.value || "")
+      .toLowerCase()
+      .trim();
 
+  const selectedCounty =
+    $("#county")?.value || "";
 
-// ============================================================
-// RENDER LISTINGS
-// ============================================================
+  const selectedBrand =
+    $("#brand")?.value || "";
 
-function renderListings(listings) {
+  const selectedSize =
+    $("#size")?.value || "";
 
-  const grid =
-    getProductsGrid();
+  const sort =
+    $("#sort")?.value || "recent";
 
-  if (!grid) {
-    console.error(
-      "GasHubKE: Products grid not found."
+  let filtered = listings.filter((listing) => {
+
+    const searchableText = [
+      listing.title,
+      listing.category,
+      listing.description,
+      listing.location,
+      listing.vendorName,
+      listing.size
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const locationText =
+      String(listing.location || "")
+        .toLowerCase();
+
+    const brandText = [
+      listing.title,
+      listing.category,
+      listing.description
+    ]
+      .join(" ")
+      .toLowerCase();
+
+    const matchesSearch =
+      !searchTerm ||
+      searchableText.includes(searchTerm);
+
+    /*
+      Your database has "location", not
+      a separate "county" field.
+      Therefore county filtering checks
+      the location text.
+    */
+    const matchesCounty =
+      !selectedCounty ||
+      locationText.includes(
+        selectedCounty.toLowerCase()
+      );
+
+    /*
+      Your database does not have a separate
+      "brand" field.
+
+      We therefore search the title,
+      category and description for the
+      selected brand.
+    */
+    const matchesBrand =
+      !selectedBrand ||
+      brandText.includes(
+        selectedBrand.toLowerCase()
+      );
+
+    const matchesSize =
+      !selectedSize ||
+      String(listing.size)
+        .toLowerCase()
+        .includes(
+          selectedSize.toLowerCase()
+        );
+
+    return (
+      matchesSearch &&
+      matchesCounty &&
+      matchesBrand &&
+      matchesSize
     );
-    return;
+  });
+
+  /* ================================
+     SORTING
+  ================================ */
+
+  if (sort === "priceAsc") {
+
+    filtered.sort(
+      (a, b) =>
+        Number(a.price || 0) -
+        Number(b.price || 0)
+    );
+
+  } else if (sort === "priceDesc") {
+
+    filtered.sort(
+      (a, b) =>
+        Number(b.price || 0) -
+        Number(a.price || 0)
+    );
   }
 
+  /* ================================
+     RESULT COUNT
+  ================================ */
 
-  if (!listings.length) {
+  const resultCount = $("#resultCount");
 
-    grid.innerHTML = `
-
-      <div class="col-12">
-
-        <div class="empty-products">
-
-          <i class="bi bi-fire"></i>
-
-          <h4>
-            No gas listings found
-          </h4>
-
-          <p>
-            Try changing your search or filters.
-          </p>
-
-        </div>
-
-      </div>
-
-    `;
-
-    updateResultsCount(0);
-
-    return;
+  if (resultCount) {
+    resultCount.textContent =
+      `${filtered.length} listing${
+        filtered.length === 1 ? "" : "s"
+      }`;
   }
 
+  /* ================================
+     NO RESULTS
+  ================================ */
 
-  grid.innerHTML =
-    listings
-      .map(renderListingCard)
-      .join("");
+  const empty = $("#empty");
 
-
-  updateResultsCount(
-    listings.length
-  );
-}
-
-
-// ============================================================
-// PRODUCT CARD
-// ============================================================
-
-function renderListingCard(item) {
-
-  const image =
-    Array.isArray(item.images) &&
-    item.images.length
-      ? item.images[0]
-      : "/assets/images/favicon.svg";
-
-
-  const price =
-    Number(item.price || 0)
-      .toLocaleString("en-KE");
-
-
-  const title =
-    escapeHtml(
-      item.title ||
-      "LPG Gas Cylinder"
+  if (empty) {
+    empty.classList.toggle(
+      "d-none",
+      filtered.length > 0
     );
+  }
 
+  /* ================================
+     DISPLAY LISTINGS
+  ================================ */
 
-  const category =
-    escapeHtml(
-      item.category ||
-      "LPG"
-    );
+  container.innerHTML = filtered
+    .map((listing) => {
 
+      const image =
+        listing.images?.length
+          ? listing.images[0]
+          : null;
 
-  const supplier =
-    escapeHtml(
-      item.vendorName ||
-      "Verified GasHubKE Supplier"
-    );
-
-
-  const location =
-    escapeHtml(
-      item.location ||
-      "Kenya"
-    );
-
-
-  const size =
-    escapeHtml(
-      item.size ||
-      ""
-    );
-
-
-  return `
-
-    <div class="col-lg-4 col-md-6 mb-4">
-
-      <article class="gashub-product-card">
-
-        <div class="product-image-wrap">
-
-          <span class="product-badge">
-            ${category}
-          </span>
-
+      const imageHTML = image
+        ? `
           <img
-            src="${escapeAttr(image)}"
-            alt="${escapeAttr(title)}"
-            class="product-image"
+            src="${esc(image)}"
+            alt="${esc(listing.title)}"
             loading="lazy"
-            decoding="async"
-            onerror="this.onerror=null;this.src='/assets/images/favicon.svg';"
+            style="
+              width:100%;
+              height:100%;
+              object-fit:cover;
+            "
+            onerror="this.style.display='none'"
           >
+        `
+        : `
+          <i class="bi bi-fire"></i>
+        `;
 
-        </div>
+      return `
+        <div class="col-sm-6 col-lg-4 col-xl-3">
 
+          <article class="product-card">
 
-        <div class="product-card-body">
+            <div class="product-img">
+              ${imageHTML}
+            </div>
 
-          <h3 class="product-title">
-            ${title}
-          </h3>
+            <div class="product-body">
 
+              <div
+                class="d-flex justify-content-between gap-2"
+              >
 
-          <div class="product-supplier">
+                <h5 class="mb-1">
+                  ${esc(listing.title)}
+                </h5>
 
-            <i class="bi bi-shop"></i>
+                <span
+                  class="badge badge-verified"
+                >
+                  Verified
+                </span>
 
-            <span>
-              ${supplier}
-            </span>
+              </div>
 
-          </div>
+              <div class="supplier">
 
+                ${esc(listing.category)}
 
-          <div class="product-location">
+                ${listing.size
+                  ? ` · ${esc(listing.size)}`
+                  : ""
+                }
 
-            <i class="bi bi-geo-alt"></i>
+                ${listing.location
+                  ? ` · ${esc(listing.location)}`
+                  : ""
+                }
 
-            <span>
-              ${location}
-            </span>
+              </div>
 
-          </div>
+              <div class="small text-muted mt-2">
 
+                <i class="bi bi-shop"></i>
 
-          ${
-            size
-              ? `
+                ${esc(listing.vendorName)}
 
-                <div class="product-meta">
+              </div>
 
-                  <i class="bi bi-box-seam"></i>
+              <div class="price mt-3">
 
-                  <span>
-                    ${size}
-                  </span>
+                KES ${money(listing.price)}
 
-                </div>
+              </div>
 
-              `
-              : ""
-          }
+              <button
+                class="btn btn-orange w-100 mt-3 add-cart"
+                data-id="${esc(listing.id)}"
+              >
 
+                <i class="bi bi-cart-plus"></i>
 
-          <div class="product-bottom">
+                Add to cart
 
-            <div class="product-price">
-
-              <small>KES</small>
-
-              ${price}
+              </button>
 
             </div>
 
-
-            <button
-              type="button"
-              class="buy-now-btn"
-              data-buy-now="${escapeAttr(item.id)}"
-            >
-
-              <i class="bi bi-cart3"></i>
-
-              Buy Now
-
-            </button>
-
-          </div>
+          </article>
 
         </div>
+      `;
+    })
+    .join("");
 
-      </article>
+  /* ================================
+     ADD TO CART EVENTS
+  ================================ */
 
-    </div>
+  document
+    .querySelectorAll(".add-cart")
+    .forEach((button) => {
 
-  `;
-}
-
-
-// ============================================================
-// FILTERING
-// ============================================================
-
-function applyFilters() {
-
-  const search =
-    currentFilters.search
-      .trim()
-      .toLowerCase();
-
-  const county =
-    currentFilters.county
-      .trim()
-      .toLowerCase();
-
-  const brand =
-    currentFilters.brand
-      .trim()
-      .toLowerCase();
-
-  const size =
-    currentFilters.size
-      .trim()
-      .toLowerCase();
-
-
-  filteredListings =
-    allListings.filter(item => {
-
-      const searchableText = [
-
-        item.title,
-        item.category,
-        item.description,
-        item.location,
-        item.vendorName,
-        item.size
-
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
-
-
-      return (
-
-        (!search ||
-          searchableText.includes(search))
-
-        &&
-
-        (!county ||
-          String(item.location || "")
-            .toLowerCase()
-            .includes(county))
-
-        &&
-
-        (!brand ||
-          [
-            item.title,
-            item.category,
-            item.description
-          ]
-            .filter(Boolean)
-            .join(" ")
-            .toLowerCase()
-            .includes(brand))
-
-        &&
-
-        (!size ||
-          String(item.size || "")
-            .toLowerCase()
-            .includes(size))
-
+      button.addEventListener(
+        "click",
+        () => {
+          addToCart(button.dataset.id);
+        }
       );
 
     });
+}
 
+/* ================================
+   CART
+================================ */
 
-  renderListings(
-    filteredListings
+function addToCart(id) {
+
+  const listing =
+    listings.find(
+      (item) => item.id === id
+    );
+
+  if (!listing) {
+    toast("Listing not found.");
+    return;
+  }
+
+  const existing =
+    cart.find(
+      (item) => item.id === id
+    );
+
+  if (existing) {
+
+    existing.quantity += 1;
+
+  } else {
+
+    cart.push({
+      id: listing.id,
+      quantity: 1,
+
+      /*
+        Keep the complete listing so
+        checkout has access to vendorId,
+        vendorName, price, etc.
+      */
+      product: listing
+    });
+
+  }
+
+  saveCart();
+
+  toast(
+    `${listing.title} added to cart.`
   );
 }
 
+/* ================================
+   RENDER CART
+================================ */
 
-// ============================================================
-// SEARCH
-// ============================================================
+function renderCart() {
 
-function setupSearch() {
+  const cartItems = $("#cartItems");
 
-  const searchInput =
-    $("#searchInput") ||
-    $("#search") ||
-    $('input[type="search"]');
+  if (!cartItems) return;
 
-  if (!searchInput) return;
+  if (!cart.length) {
 
+    cartItems.innerHTML = `
+      <div class="text-center text-muted py-5">
 
-  searchInput.addEventListener(
-    "input",
-    debounce(() => {
+        <i
+          class="bi bi-cart-x"
+          style="font-size:3rem"
+        ></i>
 
-      currentFilters.search =
-        searchInput.value;
+        <p class="mt-3">
+          Your cart is empty.
+        </p>
 
-      applyFilters();
+      </div>
+    `;
 
-    }, 250)
+  } else {
+
+    cartItems.innerHTML = cart
+      .map((item, index) => {
+
+        const product =
+          item.product || {};
+
+        return `
+          <div
+            class="d-flex justify-content-between
+                   border-bottom py-3 gap-3"
+          >
+
+            <div>
+
+              <strong>
+                ${esc(
+                  product.title ||
+                  product.name ||
+                  "LPG Gas"
+                )}
+              </strong>
+
+              <div class="small text-muted">
+
+                ${esc(
+                  product.category ||
+                  product.brand ||
+                  "LPG"
+                )}
+
+                ${
+                  product.size
+                    ? ` · ${esc(product.size)}`
+                    : ""
+                }
+
+              </div>
+
+              <div class="small text-muted">
+
+                ${esc(
+                  product.vendorName ||
+                  product.supplierName ||
+                  "Gas Supplier"
+                )}
+
+              </div>
+
+              <div class="mt-1">
+
+                KES ${money(product.price)}
+
+                × ${item.quantity}
+
+              </div>
+
+            </div>
+
+            <button
+              class="btn btn-sm btn-outline-danger
+                     remove-cart"
+              data-index="${index}"
+            >
+              Remove
+            </button>
+
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  const total = cart.reduce(
+    (total, item) => {
+
+      const price =
+        Number(
+          item.product?.price || 0
+        );
+
+      return total +
+        price * Number(item.quantity || 0);
+
+    },
+    0
   );
 
+  if ($("#cartTotal")) {
+    $("#cartTotal").textContent =
+      money(total);
+  }
+
+  document
+    .querySelectorAll(".remove-cart")
+    .forEach((button) => {
+
+      button.addEventListener(
+        "click",
+        () => {
+
+          const index =
+            Number(
+              button.dataset.index
+            );
+
+          cart.splice(index, 1);
+
+          saveCart();
+
+          renderCart();
+        }
+      );
+
+    });
 }
 
+/* ================================
+   CART BUTTON
+================================ */
 
-// ============================================================
-// FILTERS
-// ============================================================
+const cartButton = $("#cartBtn");
 
-function setupFilters() {
+if (cartButton) {
 
-  const county =
-    $("#countyFilter") ||
-    $("#county");
-
-  const brand =
-    $("#brandFilter") ||
-    $("#brand");
-
-  const size =
-    $("#sizeFilter") ||
-    $("#size");
-
-
-  county?.addEventListener(
-    "change",
-    () => {
-
-      currentFilters.county =
-        county.value;
-
-      applyFilters();
-
-    }
-  );
-
-
-  brand?.addEventListener(
-    "change",
-    () => {
-
-      currentFilters.brand =
-        brand.value;
-
-      applyFilters();
-
-    }
-  );
-
-
-  size?.addEventListener(
-    "change",
-    () => {
-
-      currentFilters.size =
-        size.value;
-
-      applyFilters();
-
-    }
-  );
-
-
-  const clearButton =
-    $("#clearFilters") ||
-    $("[data-clear-filters]");
-
-
-  clearButton?.addEventListener(
+  cartButton.addEventListener(
     "click",
     () => {
 
-      if (county)
-        county.value = "";
+      renderCart();
 
-      if (brand)
-        brand.value = "";
+      const modal =
+        $("#cartModal");
 
-      if (size)
-        size.value = "";
+      if (modal) {
 
+        bootstrap.Modal
+          .getOrCreateInstance(modal)
+          .show();
 
-      const searchInput =
-        $("#searchInput") ||
-        $("#search") ||
-        $('input[type="search"]');
-
-
-      if (searchInput)
-        searchInput.value = "";
-
-
-      currentFilters = {
-        search: "",
-        county: "",
-        brand: "",
-        size: ""
-      };
-
-
-      renderListings(
-        allListings
-      );
+      }
 
     }
   );
-
 }
 
+/* ================================
+   CHECKOUT
+================================ */
 
-// ============================================================
-// POPULATE COUNTY
-// ============================================================
+const checkoutButton =
+  $("#checkoutBtn");
 
-function populateCountyFilter(listings) {
+if (checkoutButton) {
 
-  const select =
-    $("#countyFilter") ||
-    $("#county");
-
-  if (!select) return;
-
-
-  const current =
-    select.value;
-
-
-  const firstOption =
-    select.querySelector(
-      "option:first-child"
-    );
-
-
-  const locations = [
-    ...new Set(
-      listings
-        .map(
-          item => item.location
-        )
-        .filter(Boolean)
-    )
-  ].sort();
-
-
-  select.innerHTML = "";
-
-
-  const defaultOption =
-    document.createElement(
-      "option"
-    );
-
-
-  defaultOption.value = "";
-
-
-  defaultOption.textContent =
-    firstOption?.textContent ||
-    "All Locations";
-
-
-  select.appendChild(
-    defaultOption
-  );
-
-
-  locations.forEach(
-    location => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        location;
-
-      option.textContent =
-        location;
-
-      select.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  select.value =
-    current;
-
-}
-
-
-// ============================================================
-// POPULATE BRAND
-// ============================================================
-
-function populateBrandFilter(listings) {
-
-  const select =
-    $("#brandFilter") ||
-    $("#brand");
-
-  if (!select) return;
-
-
-  const current =
-    select.value;
-
-
-  const firstOption =
-    select.querySelector(
-      "option:first-child"
-    );
-
-
-  const brands = [
-    ...new Set(
-      listings
-        .map(
-          item => item.category
-        )
-        .filter(Boolean)
-    )
-  ].sort();
-
-
-  select.innerHTML = "";
-
-
-  const defaultOption =
-    document.createElement(
-      "option"
-    );
-
-
-  defaultOption.value = "";
-
-
-  defaultOption.textContent =
-    firstOption?.textContent ||
-    "All Categories";
-
-
-  select.appendChild(
-    defaultOption
-  );
-
-
-  brands.forEach(
-    brand => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        brand;
-
-      option.textContent =
-        brand;
-
-      select.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  select.value =
-    current;
-
-}
-
-
-// ============================================================
-// POPULATE SIZE
-// ============================================================
-
-function populateSizeFilter(listings) {
-
-  const select =
-    $("#sizeFilter") ||
-    $("#size");
-
-  if (!select) return;
-
-
-  const current =
-    select.value;
-
-
-  const firstOption =
-    select.querySelector(
-      "option:first-child"
-    );
-
-
-  const sizes = [
-    ...new Set(
-      listings
-        .map(
-          item => item.size
-        )
-        .filter(Boolean)
-    )
-  ].sort();
-
-
-  select.innerHTML = "";
-
-
-  const defaultOption =
-    document.createElement(
-      "option"
-    );
-
-
-  defaultOption.value = "";
-
-
-  defaultOption.textContent =
-    firstOption?.textContent ||
-    "All Sizes";
-
-
-  select.appendChild(
-    defaultOption
-  );
-
-
-  sizes.forEach(
-    size => {
-
-      const option =
-        document.createElement(
-          "option"
-        );
-
-      option.value =
-        size;
-
-      option.textContent =
-        size;
-
-      select.appendChild(
-        option
-      );
-
-    }
-  );
-
-
-  select.value =
-    current;
-
-}
-
-
-// ============================================================
-// PRODUCT ACTIONS
-// ============================================================
-
-function setupProductActions() {
-
-  document.addEventListener(
+  checkoutButton.addEventListener(
     "click",
-    event => {
+    () => {
 
-      const button =
-        event.target.closest(
-          "[data-buy-now]"
-        );
+      if (!cart.length) {
 
-      if (!button) return;
-
-
-      const listing =
-        allListings.find(
-          item =>
-            item.id ===
-            button.dataset.buyNow
-        );
-
-
-      if (!listing) {
-
-        showMessage(
-          "This product is no longer available.",
-          "danger"
+        toast(
+          "Your cart is empty."
         );
 
         return;
       }
 
+      if (!auth.currentUser) {
 
-      buyNow(listing);
+        location.href =
+          "/auth/login.html?next=/checkout.html";
 
-    }
-  );
-
-}
-
-
-// ============================================================
-// ADD CART ACTIONS
-// ============================================================
-
-function setupCartActions() {
-
-  document.addEventListener(
-    "click",
-    event => {
-
-      const button =
-        event.target.closest(
-          "[data-add-cart]"
-        );
-
-      if (!button) return;
-
-
-      const listing =
-        allListings.find(
-          item =>
-            item.id ===
-            button.dataset.addCart
-        );
-
-
-      if (listing) {
-        addToCart(listing);
+        return;
       }
 
+      location.href =
+        "/checkout.html";
     }
   );
-
 }
 
+/* ================================
+   FILTER EVENTS
+================================ */
 
-// ============================================================
-// AUTH UI
-// ============================================================
+[
+  "search",
+  "county",
+  "brand",
+  "size",
+  "sort"
+].forEach((id) => {
 
-function setupAuthUI() {
+  const element = $(`#${id}`);
 
-  onAuthStateChanged(
-    auth,
-    user => {
+  if (!element) return;
 
-      const signInLinks =
-        $$(
-          '[data-auth="signin"], #signInLink'
-        );
-
-      const accountLinks =
-        $$(
-          '[data-auth="account"], #accountLink'
-        );
-
-      const supplierLinks =
-        $$(
-          '[data-auth="supplier"], #supplierLink'
-        );
-
-
-      if (user) {
-
-        signInLinks.forEach(
-          element =>
-            element.style.display =
-              "none"
-        );
-
-
-        accountLinks.forEach(
-          element =>
-            element.style.display =
-              ""
-        );
-
-
-        supplierLinks.forEach(
-          element =>
-            element.style.display =
-              ""
-        );
-
-      } else {
-
-        signInLinks.forEach(
-          element =>
-            element.style.display =
-              ""
-        );
-
-
-        accountLinks.forEach(
-          element =>
-            element.style.display =
-              "none"
-        );
-
-
-        supplierLinks.forEach(
-          element =>
-            element.style.display =
-              "none"
-        );
-
-      }
-
-    }
+  element.addEventListener(
+    "input",
+    renderListings
   );
 
-}
-
-
-// ============================================================
-// RESULTS COUNT
-// ============================================================
-
-function updateResultsCount(count) {
-
-  $$(
-    "#resultsCount, [data-results-count]"
-  ).forEach(
-    element => {
-
-      element.textContent =
-        `${count} ${
-          count === 1
-            ? "product"
-            : "products"
-        }`;
-
-    }
+  element.addEventListener(
+    "change",
+    renderListings
   );
+});
 
-}
+/* ================================
+   AUTH STATE
+================================ */
 
+onAuthStateChanged(
+  auth,
+  (user) => {
 
-// ============================================================
-// LOADING
-// ============================================================
+    const authButton =
+      $("#authBtn");
 
-function showLoading(grid) {
+    if (!authButton) return;
 
-  if (!grid) return;
+    if (user) {
 
+      authButton.textContent =
+        "Account";
 
-  grid.innerHTML = `
-
-    <div class="col-12">
-
-      <div class="text-center py-5">
-
-        <div
-          class="spinner-border text-warning"
-          role="status"
-        >
-
-          <span class="visually-hidden">
-            Loading...
-          </span>
-
-        </div>
-
-
-        <p class="text-muted mt-3">
-          Loading gas listings...
-        </p>
-
-      </div>
-
-    </div>
-
-  `;
-}
-
-
-// ============================================================
-// ERROR
-// ============================================================
-
-function showError(grid, message) {
-
-  if (!grid) return;
-
-
-  grid.innerHTML = `
-
-    <div class="col-12">
-
-      <div class="alert alert-danger text-center">
-
-        <i class="bi bi-exclamation-triangle me-1"></i>
-
-        ${escapeHtml(message)}
-
-      </div>
-
-    </div>
-
-  `;
-}
-
-
-// ============================================================
-// TOAST
-// ============================================================
-
-function showMessage(
-  message,
-  type = "success"
-) {
-
-  let toast =
-    $("#gashubToast");
-
-
-  if (!toast) {
-
-    toast =
-      document.createElement(
-        "div"
-      );
-
-
-    toast.id =
-      "gashubToast";
-
-
-    toast.style.position =
-      "fixed";
-
-    toast.style.right =
-      "20px";
-
-    toast.style.bottom =
-      "20px";
-
-    toast.style.zIndex =
-      "99999";
-
-    toast.style.maxWidth =
-      "360px";
-
-
-    document.body.appendChild(
-      toast
-    );
-
-  }
-
-
-  toast.innerHTML = `
-
-    <div
-      class="alert alert-${escapeAttr(type)} shadow mb-0"
-    >
-
-      ${escapeHtml(message)}
-
-    </div>
-
-  `;
-
-
-  setTimeout(
-    () => {
-      toast.innerHTML = "";
-    },
-    3500
-  );
-
-}
-
-
-// ============================================================
-// DEBOUNCE
-// ============================================================
-
-function debounce(
-  callback,
-  delay = 250
-) {
-
-  let timer;
-
-
-  return (...args) => {
-
-    clearTimeout(timer);
-
-    timer =
-      setTimeout(
-        () => callback(...args),
-        delay
-      );
-
-  };
-
-}
-
-
-// ============================================================
-// NAVIGATION
-// ============================================================
-
-function setupNavigation() {
-
-  $$(
-    '[data-link="supplier"]'
-  ).forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
+      authButton.onclick =
         () => {
-
-          window.location.href =
-            "/supplier/";
-
-        }
-      );
-
-    }
-  );
-
-
-  $$(
-    '[data-link="cart"], #cartLink'
-  ).forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          window.location.href =
-            "/checkout.html";
-
-        }
-      );
-
-    }
-  );
-
-
-  $$(
-    '[data-link="settings"]'
-  ).forEach(
-    button => {
-
-      button.addEventListener(
-        "click",
-        () => {
-
-          window.location.href =
+          location.href =
             "/settings/";
+        };
 
-        }
-      );
+    } else {
+
+      authButton.textContent =
+        "Sign in";
+
+      authButton.onclick =
+        () => {
+          location.href =
+            "/auth/login.html";
+        };
 
     }
-  );
+  }
+);
 
-}
+/* ================================
+   START APPLICATION
+================================ */
 
+renderCartCount();
 
-// ============================================================
-// INITIALIZE
-// ============================================================
-
-function initMarketplace() {
-
-  updateCartBadge();
-
-  setupSearch();
-
-  setupFilters();
-
-  setupProductActions();
-
-  setupCartActions();
-
-  setupAuthUI();
-
-  setupNavigation();
-
-  // Let the homepage display immediately.
-  hideAppLoader();
-
-  // Load Firestore listings in the background.
-  loadListings();
-}
-
-
-// ============================================================
-// START
-// ============================================================
-
-if (
-  document.readyState === "loading"
-) {
-
-  document.addEventListener(
-    "DOMContentLoaded",
-    initMarketplace,
-    { once: true }
-  );
-
-} else {
-
-  initMarketplace();
-
-}
+loadListings();
