@@ -1,14 +1,14 @@
 import {
   auth,
-  signInWithEmailAndPassword,
+  googleProvider,
   signInWithPopup,
-  GoogleAuthProvider,
+  signInWithEmailAndPassword,
   sendPasswordResetEmail
 } from "./firebase.js";
 
-/**
- * Email + password login
- */
+/* =========================
+   EMAIL / PASSWORD LOGIN
+========================= */
 export async function login(email, password) {
   email = email.trim();
 
@@ -55,28 +55,32 @@ export async function login(email, password) {
 
       case "auth/operation-not-allowed":
         throw new Error(
-          "Email/password sign-in is not enabled in Firebase Authentication."
+          "Email/password sign-in is not enabled in Firebase."
         );
 
       case "auth/unauthorized-domain":
         throw new Error(
-          "This website domain is not authorized in Firebase Authentication."
+          "This website domain is not authorized in Firebase."
         );
 
       default:
-        throw new Error(error.message || "Unable to sign in.");
+        throw new Error(
+          error.message || "Unable to sign in."
+        );
     }
   }
 }
 
-/**
- * Google login
- */
+
+/* =========================
+   GOOGLE LOGIN
+========================= */
 export async function googleLogin() {
   try {
-    const provider = new GoogleAuthProvider();
-
-    const result = await signInWithPopup(auth, provider);
+    const result = await signInWithPopup(
+      auth,
+      googleProvider
+    );
 
     return result.user;
   } catch (error) {
@@ -93,17 +97,17 @@ export async function googleLogin() {
 
       case "auth/unauthorized-domain":
         throw new Error(
-          "This website domain is not authorized in Firebase Authentication."
-        );
-
-      case "auth/account-exists-with-different-credential":
-        throw new Error(
-          "An account already exists with this email using another sign-in method."
+          "This website domain is not authorized in Firebase."
         );
 
       case "auth/network-request-failed":
         throw new Error(
           "Network error. Check your internet connection and try again."
+        );
+
+      case "auth/account-exists-with-different-credential":
+        throw new Error(
+          "An account already exists with this email using another sign-in method."
         );
 
       default:
@@ -114,9 +118,10 @@ export async function googleLogin() {
   }
 }
 
-/**
- * Password reset
- */
+
+/* =========================
+   PASSWORD RESET
+========================= */
 export async function resetPassword(email) {
   email = email.trim();
 
@@ -126,6 +131,7 @@ export async function resetPassword(email) {
 
   try {
     await sendPasswordResetEmail(auth, email);
+
   } catch (error) {
     console.error("Password reset error:", error);
 
