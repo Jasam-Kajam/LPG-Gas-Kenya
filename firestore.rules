@@ -1,0 +1,59 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(uid) {
+      return signedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return signedIn() && request.auth.token.admin == true;
+    }
+
+    match /users/{uid} {
+      allow read: if isOwner(uid) || isAdmin();
+      allow create: if isOwner(uid);
+      allow update: if isOwner(uid) || isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow read: if resource.data.status == 'active' || isAdmin() ||
+        (signedIn() && resource.data.supplierId == request.auth.uid);
+      allow create: if signedIn() &&
+        request.resource.data.supplierId == request.auth.uid;
+      allow update: if isAdmin() ||
+        (signedIn() && resource.data.supplierId == request.auth.uid);
+      allow delete: if isAdmin() ||
+        (signedIn() && resource.data.supplierId == request.auth.uid);
+    }
+
+    match /orders/{orderId} {
+      allow create: if signedIn() &&
+        request.resource.data.customerId == request.auth.uid;
+      allow read: if isAdmin() ||
+        (signedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.supplierId == request.auth.uid
+        ));
+      allow update: if isAdmin() ||
+        (signedIn() && (
+          resource.data.customerId == request.auth.uid ||
+          resource.data.supplierId == request.auth.uid
+        ));
+      allow delete: if isAdmin();
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if true;
+      allow create: if signedIn() &&
+        request.resource.data.customerId == request.auth.uid;
+      allow update, delete: if isAdmin() ||
+        (signedIn() && resource.data.customerId == request.auth.uid);
+    }
+  }
+}
