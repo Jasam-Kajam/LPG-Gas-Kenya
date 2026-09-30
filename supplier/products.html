@@ -1,1 +1,1168 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Add Listing | GasHubKE</title><link rel="stylesheet" href="/assets/css/app.css"><link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css" rel="stylesheet"></head><body><main class="container py-5"><a href="/supplier/">← Dashboard</a><div class="hero-card mt-3"><h3>Add LPG listing</h3><form id="form" class="row g-2"><div class="col-md-6"><input id="name" class="form-control" placeholder="Listing name" required></div><div class="col-md-6"><select id="brand" class="form-select" required><option value="">Brand</option></select></div><div class="col-md-4"><select id="size" class="form-select" required><option>3kg</option><option>6kg</option><option>13kg</option><option>50kg</option></select></div><div class="col-md-4"><input id="price" type="number" min="1" max="1350" class="form-control" placeholder="Price (KES)" required></div><div class="col-md-4"><input id="county" class="form-control" placeholder="County" required></div><div class="col-12"><input id="town" class="form-control" placeholder="Town" required></div><div class="col-12"><button class="btn btn-orange">Publish listing</button></div></form><p id="msg" class="mt-3"></p></div></main><script type="module">import {auth,db,collection,addDoc,serverTimestamp} from "/assets/js/firebase.js";import {BRANDS} from "/assets/js/config.js";const $=x=>document.querySelector(x);BRANDS.forEach(x=>$("#brand").insertAdjacentHTML("beforeend",`<option>${x}</option>`));$("#form").onsubmit=async e=>{e.preventDefault();if(!auth.currentUser)return location.href="/auth/login.html";try{const p={name:$("#name").value,brand:$("#brand").value,size:$("#size").value,price:Number($("#price").value),county:$("#county").value,town:$("#town").value,supplierId:auth.currentUser.uid,supplierName:auth.currentUser.displayName||auth.currentUser.email,status:"active",createdAt:serverTimestamp()};if(p.price>1350)throw Error("Maximum refill price is KES 1,350.");await addDoc(collection(db,"products"),p);location.href="/supplier/"}catch(x){$("#msg").textContent=x.message}};</script></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Manage Listings | GasHubKE</title>
+
+  <link rel="icon" href="/assets/images/favicon.png">
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css"
+    rel="stylesheet"
+  >
+
+  <style>
+    :root {
+      --orange: #f97316;
+      --dark: #1e293b;
+      --light: #f8fafc;
+      --border: #e2e8f0;
+    }
+
+    body {
+      background: var(--light);
+      color: var(--dark);
+      font-family: Poppins, Arial, sans-serif;
+    }
+
+    .navbar {
+      background: #fff;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .navbar-brand {
+      font-weight: 700;
+      color: var(--orange);
+    }
+
+    .page-header {
+      background: linear-gradient(135deg, #fff7ed, #ffffff);
+      border-bottom: 1px solid var(--border);
+      padding: 30px 0;
+    }
+
+    .card {
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 4px 18px rgba(15, 23, 42, .05);
+    }
+
+    .form-control,
+    .form-select {
+      border-radius: 10px;
+      padding: 11px 13px;
+    }
+
+    .form-control:focus,
+    .form-select:focus {
+      border-color: var(--orange);
+      box-shadow: 0 0 0 .2rem rgba(249, 115, 22, .12);
+    }
+
+    .btn-orange {
+      background: var(--orange);
+      border-color: var(--orange);
+      color: white;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .btn-orange:hover {
+      background: #ea580c;
+      border-color: #ea580c;
+      color: white;
+    }
+
+    .listing-card {
+      overflow: hidden;
+    }
+
+    .listing-image {
+      width: 100%;
+      height: 190px;
+      object-fit: cover;
+      background: #f1f5f9;
+    }
+
+    .listing-placeholder {
+      height: 190px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff7ed;
+      color: var(--orange);
+      font-size: 3rem;
+    }
+
+    .price {
+      color: var(--orange);
+      font-size: 1.2rem;
+      font-weight: 700;
+    }
+
+    .listing-meta {
+      color: #64748b;
+      font-size: .9rem;
+    }
+
+    .empty-state {
+      padding: 50px 20px;
+      text-align: center;
+      color: #64748b;
+    }
+
+    .spinner-border {
+      color: var(--orange);
+    }
+
+    .required::after {
+      content: " *";
+      color: #dc2626;
+    }
+  </style>
+</head>
+
+<body>
+
+<nav class="navbar navbar-expand-lg sticky-top">
+  <div class="container">
+
+    <a class="navbar-brand d-flex align-items-center gap-2" href="/">
+      <img
+        src="/assets/images/favicon.png"
+        width="38"
+        height="38"
+        class="rounded-circle"
+        alt="GasHubKE"
+      >
+      GasHubKE
+    </a>
+
+    <button
+      class="navbar-toggler"
+      type="button"
+      data-bs-toggle="collapse"
+      data-bs-target="#supplierNav"
+    >
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="collapse navbar-collapse" id="supplierNav">
+      <ul class="navbar-nav ms-auto align-items-lg-center">
+
+        <li class="nav-item">
+          <a class="nav-link" href="/supplier/">
+            <i class="bi bi-speedometer2"></i> Dashboard
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link active" href="/supplier/products.html">
+            <i class="bi bi-box-seam"></i> Listings
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <a class="nav-link" href="/orders/">
+            <i class="bi bi-receipt"></i> Orders
+          </a>
+        </li>
+
+        <li class="nav-item">
+          <button id="logoutBtn" class="btn btn-outline-secondary btn-sm ms-lg-3">
+            <i class="bi bi-box-arrow-right"></i> Logout
+          </button>
+        </li>
+
+      </ul>
+    </div>
+  </div>
+</nav>
+
+
+<section class="page-header">
+  <div class="container">
+    <h1 class="fw-bold mb-2">
+      <i class="bi bi-box-seam text-warning"></i>
+      Manage Listings
+    </h1>
+
+    <p class="text-muted mb-0">
+      Add and manage your cooking gas listings on GasHubKE.
+    </p>
+  </div>
+</section>
+
+
+<main class="container py-4">
+
+  <!-- Add Listing -->
+  <div class="card mb-4">
+    <div class="card-body p-4">
+
+      <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+          <h4 class="fw-bold mb-1">Add New Listing</h4>
+          <p class="text-muted mb-0">
+            Provide accurate information about your gas product.
+          </p>
+        </div>
+      </div>
+
+      <form id="listingForm">
+
+        <div class="row g-3">
+
+          <div class="col-md-6">
+            <label class="form-label required">Listing Title</label>
+            <input
+              type="text"
+              id="title"
+              class="form-control"
+              placeholder="e.g. ProGas 6KG Refill"
+              required
+            >
+          </div>
+
+
+          <div class="col-md-3">
+            <label class="form-label required">Category</label>
+
+            <select id="category" class="form-select" required>
+              <option value="">Select category</option>
+              <option value="LPG Gas">LPG Gas</option>
+              <option value="Gas Refill">Gas Refill</option>
+              <option value="Gas Cylinder">Gas Cylinder</option>
+              <option value="Gas Accessories">Gas Accessories</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+
+          <div class="col-md-3">
+            <label class="form-label required">Cylinder Size</label>
+
+            <select id="size" class="form-select" required>
+              <option value="">Select size</option>
+              <option value="3KG">3KG</option>
+              <option value="6KG">6KG</option>
+              <option value="13KG">13KG</option>
+              <option value="22.5KG">22.5KG</option>
+              <option value="50KG">50KG</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+
+          <div class="col-md-6">
+            <label class="form-label required">Price (KES)</label>
+
+            <input
+              type="number"
+              id="price"
+              class="form-control"
+              min="1"
+              step="1"
+              placeholder="e.g. 1350"
+              required
+            >
+          </div>
+
+
+          <div class="col-md-6">
+            <label class="form-label required">Location</label>
+
+            <input
+              type="text"
+              id="location"
+              class="form-control"
+              placeholder="e.g. Nairobi, Kasarani"
+              required
+            >
+          </div>
+
+
+          <div class="col-12">
+            <label class="form-label">Description</label>
+
+            <textarea
+              id="description"
+              class="form-control"
+              rows="4"
+              placeholder="Describe the gas product, refill condition, delivery information, etc."
+            ></textarea>
+          </div>
+
+
+          <div class="col-12">
+            <label class="form-label">
+              Product Image URL
+            </label>
+
+            <input
+              type="url"
+              id="imageUrl"
+              class="form-control"
+              placeholder="https://example.com/gas-cylinder.jpg"
+            >
+
+            <div class="form-text">
+              You can add an image URL. Leave blank if you do not have one.
+            </div>
+          </div>
+
+
+          <div class="col-12 pt-2">
+
+            <button
+              type="submit"
+              id="saveBtn"
+              class="btn btn-orange px-4"
+            >
+              <i class="bi bi-plus-circle"></i>
+              Add Listing
+            </button>
+
+          </div>
+
+        </div>
+
+      </form>
+
+      <div id="formMessage" class="mt-3"></div>
+
+    </div>
+  </div>
+
+
+  <!-- Listings -->
+  <div class="d-flex justify-content-between align-items-center mb-3">
+
+    <div>
+      <h4 class="fw-bold mb-1">Your Listings</h4>
+      <p class="text-muted mb-0">
+        Products currently listed on the marketplace.
+      </p>
+    </div>
+
+    <span
+      id="listingCount"
+      class="badge bg-secondary"
+    >
+      0 listings
+    </span>
+
+  </div>
+
+
+  <div id="loading" class="text-center py-5">
+    <div class="spinner-border" role="status"></div>
+    <p class="mt-3 text-muted">Loading your listings...</p>
+  </div>
+
+
+  <div
+    id="listingsContainer"
+    class="row g-4 d-none"
+  ></div>
+
+
+  <div
+    id="emptyState"
+    class="card empty-state d-none"
+  >
+    <i class="bi bi-box-seam fs-1"></i>
+
+    <h5 class="mt-3 fw-bold">
+      No listings yet
+    </h5>
+
+    <p class="mb-0">
+      Add your first cooking gas listing using the form above.
+    </p>
+  </div>
+
+</main>
+
+
+<!-- Delete Confirmation Modal -->
+<div
+  class="modal fade"
+  id="deleteModal"
+  tabindex="-1"
+>
+  <div class="modal-dialog modal-dialog-centered">
+
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">
+          Delete Listing
+        </h5>
+
+        <button
+          type="button"
+          class="btn-close"
+          data-bs-dismiss="modal"
+        ></button>
+      </div>
+
+      <div class="modal-body">
+        Are you sure you want to delete this listing?
+        This action cannot be undone.
+      </div>
+
+      <div class="modal-footer">
+
+        <button
+          type="button"
+          class="btn btn-secondary"
+          data-bs-dismiss="modal"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="button"
+          id="confirmDeleteBtn"
+          class="btn btn-danger"
+        >
+          Delete Listing
+        </button>
+
+      </div>
+
+    </div>
+  </div>
+</div>
+
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/js/bootstrap.bundle.min.js"></script>
+
+
+<script type="module">
+
+import {
+  auth,
+  db,
+  onAuthStateChanged,
+  signOut
+} from "/assets/js/firebase.js";
+
+import {
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  orderBy,
+  serverTimestamp,
+  deleteDoc,
+  doc
+} from "https://www.gstatic.com/firebasejs/12.1.0/firebase-firestore.js";
+
+
+const form = document.getElementById("listingForm");
+const saveBtn = document.getElementById("saveBtn");
+const formMessage = document.getElementById("formMessage");
+
+const listingsContainer =
+  document.getElementById("listingsContainer");
+
+const loading =
+  document.getElementById("loading");
+
+const emptyState =
+  document.getElementById("emptyState");
+
+const listingCount =
+  document.getElementById("listingCount");
+
+const logoutBtn =
+  document.getElementById("logoutBtn");
+
+const confirmDeleteBtn =
+  document.getElementById("confirmDeleteBtn");
+
+
+let currentUser = null;
+let deleteListingId = null;
+
+
+/* --------------------------------
+   AUTHENTICATION
+-------------------------------- */
+
+onAuthStateChanged(auth, async (user) => {
+
+  if (!user) {
+    window.location.href = "/auth/login.html";
+    return;
+  }
+
+  currentUser = user;
+
+  await loadListings();
+});
+
+
+/* --------------------------------
+   LOGOUT
+-------------------------------- */
+
+logoutBtn.addEventListener("click", async () => {
+
+  try {
+
+    await signOut(auth);
+
+    window.location.href = "/";
+
+  } catch (error) {
+
+    console.error(error);
+
+    alert("Unable to log out. Please try again.");
+
+  }
+
+});
+
+
+/* --------------------------------
+   ADD LISTING
+-------------------------------- */
+
+form.addEventListener("submit", async (event) => {
+
+  event.preventDefault();
+
+  if (!currentUser) {
+    showMessage(
+      "Please sign in before creating a listing.",
+      "danger"
+    );
+    return;
+  }
+
+
+  const title =
+    document.getElementById("title").value.trim();
+
+  const category =
+    document.getElementById("category").value.trim();
+
+  const size =
+    document.getElementById("size").value.trim();
+
+  const price =
+    Number(document.getElementById("price").value);
+
+  const location =
+    document.getElementById("location").value.trim();
+
+  const description =
+    document.getElementById("description").value.trim();
+
+  const imageUrl =
+    document.getElementById("imageUrl").value.trim();
+
+
+  if (!title || !category || !size || !location || !price) {
+
+    showMessage(
+      "Please complete all required fields.",
+      "danger"
+    );
+
+    return;
+  }
+
+
+  if (price <= 0) {
+
+    showMessage(
+      "Please enter a valid price.",
+      "danger"
+    );
+
+    return;
+  }
+
+
+  saveBtn.disabled = true;
+
+  saveBtn.innerHTML = `
+    <span
+      class="spinner-border spinner-border-sm me-2"
+      role="status"
+    ></span>
+    Saving...
+  `;
+
+
+  try {
+
+    /*
+      IMPORTANT:
+      This writes to the existing "listings"
+      Firestore collection.
+    */
+
+    const listingData = {
+
+      title: title,
+
+      category: category,
+
+      description: description,
+
+      images: imageUrl
+        ? [imageUrl]
+        : [],
+
+      location: location,
+
+      price: price,
+
+      size: size,
+
+      vendorId: currentUser.uid,
+
+      vendorName:
+        currentUser.displayName ||
+        currentUser.email ||
+        "GasHubKE Supplier",
+
+      createdAt: serverTimestamp()
+
+    };
+
+
+    await addDoc(
+      collection(db, "listings"),
+      listingData
+    );
+
+
+    form.reset();
+
+    showMessage(
+      "Listing added successfully.",
+      "success"
+    );
+
+
+    await loadListings();
+
+  } catch (error) {
+
+    console.error(
+      "Error creating listing:",
+      error
+    );
+
+    showMessage(
+      getFirebaseError(error),
+      "danger"
+    );
+
+  } finally {
+
+    saveBtn.disabled = false;
+
+    saveBtn.innerHTML = `
+      <i class="bi bi-plus-circle"></i>
+      Add Listing
+    `;
+
+  }
+
+});
+
+
+/* --------------------------------
+   LOAD SUPPLIER LISTINGS
+-------------------------------- */
+
+async function loadListings() {
+
+  loading.classList.remove("d-none");
+
+  listingsContainer.classList.add("d-none");
+
+  emptyState.classList.add("d-none");
+
+
+  try {
+
+    if (!currentUser) return;
+
+
+    let snapshot;
+
+
+    try {
+
+      const listingsQuery = query(
+        collection(db, "listings"),
+        where(
+          "vendorId",
+          "==",
+          currentUser.uid
+        ),
+        orderBy(
+          "createdAt",
+          "desc"
+        )
+      );
+
+      snapshot =
+        await getDocs(listingsQuery);
+
+    } catch (error) {
+
+      /*
+        Fallback if Firestore asks for an index.
+      */
+
+      console.warn(
+        "Ordered query failed. Using fallback query.",
+        error
+      );
+
+      const fallbackQuery = query(
+        collection(db, "listings"),
+        where(
+          "vendorId",
+          "==",
+          currentUser.uid
+        )
+      );
+
+      snapshot =
+        await getDocs(fallbackQuery);
+
+    }
+
+
+    const listings = [];
+
+
+    snapshot.forEach((listingDoc) => {
+
+      listings.push({
+        id: listingDoc.id,
+        ...listingDoc.data()
+      });
+
+    });
+
+
+    /*
+      Client-side sorting also handles
+      listings without createdAt.
+    */
+
+    listings.sort((a, b) => {
+
+      const aTime =
+        a.createdAt?.seconds || 0;
+
+      const bTime =
+        b.createdAt?.seconds || 0;
+
+      return bTime - aTime;
+
+    });
+
+
+    renderListings(listings);
+
+  } catch (error) {
+
+    console.error(
+      "Error loading listings:",
+      error
+    );
+
+    listingsContainer.innerHTML = `
+      <div class="col-12">
+        <div class="alert alert-danger">
+          <i class="bi bi-exclamation-triangle"></i>
+          Unable to load your listings.
+          Please refresh the page and try again.
+        </div>
+      </div>
+    `;
+
+    listingsContainer.classList.remove("d-none");
+
+  } finally {
+
+    loading.classList.add("d-none");
+
+  }
+
+}
+
+
+/* --------------------------------
+   RENDER LISTINGS
+-------------------------------- */
+
+function renderListings(listings) {
+
+  listingCount.textContent =
+    `${listings.length} ${
+      listings.length === 1
+        ? "listing"
+        : "listings"
+    }`;
+
+
+  if (!listings.length) {
+
+    listingsContainer.classList.add("d-none");
+
+    emptyState.classList.remove("d-none");
+
+    return;
+  }
+
+
+  emptyState.classList.add("d-none");
+
+  listingsContainer.classList.remove("d-none");
+
+
+  listingsContainer.innerHTML =
+    listings.map(renderListing).join("");
+
+}
+
+
+/* --------------------------------
+   LISTING CARD
+-------------------------------- */
+
+function renderListing(listing) {
+
+  const image =
+    Array.isArray(listing.images) &&
+    listing.images.length
+      ? listing.images[0]
+      : null;
+
+
+  const title =
+    escapeHtml(
+      listing.title ||
+      "Untitled Listing"
+    );
+
+
+  const category =
+    escapeHtml(
+      listing.category ||
+      "LPG Gas"
+    );
+
+
+  const size =
+    escapeHtml(
+      listing.size ||
+      "N/A"
+    );
+
+
+  const location =
+    escapeHtml(
+      listing.location ||
+      "Kenya"
+    );
+
+
+  const description =
+    escapeHtml(
+      listing.description ||
+      "No description provided."
+    );
+
+
+  const price =
+    Number(listing.price || 0)
+      .toLocaleString(
+        "en-KE"
+      );
+
+
+  return `
+
+    <div class="col-md-6 col-lg-4">
+
+      <div class="card listing-card h-100">
+
+        ${
+          image
+            ? `
+              <img
+                src="${escapeAttribute(image)}"
+                class="listing-image"
+                alt="${title}"
+                loading="lazy"
+                onerror="this.style.display='none';this.nextElementSibling.classList.remove('d-none')"
+              >
+
+              <div class="listing-placeholder d-none">
+                <i class="bi bi-fire"></i>
+              </div>
+            `
+            : `
+              <div class="listing-placeholder">
+                <i class="bi bi-fire"></i>
+              </div>
+            `
+        }
+
+
+        <div class="card-body d-flex flex-column">
+
+          <div class="mb-2">
+            <span class="badge text-bg-light">
+              ${category}
+            </span>
+
+            <span class="badge text-bg-light">
+              ${size}
+            </span>
+          </div>
+
+
+          <h5 class="fw-bold mb-2">
+            ${title}
+          </h5>
+
+
+          <div class="price mb-2">
+            KSh ${price}
+          </div>
+
+
+          <p class="listing-meta mb-2">
+            <i class="bi bi-geo-alt"></i>
+            ${location}
+          </p>
+
+
+          <p class="text-muted small mb-3">
+            ${description}
+          </p>
+
+
+          <div class="mt-auto">
+
+            <button
+              class="btn btn-outline-danger btn-sm w-100"
+              onclick="prepareDelete('${listing.id}')"
+            >
+              <i class="bi bi-trash"></i>
+              Delete Listing
+            </button>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  `;
+
+}
+
+
+/* --------------------------------
+   DELETE LISTING
+-------------------------------- */
+
+window.prepareDelete = function(listingId) {
+
+  deleteListingId = listingId;
+
+  const modalElement =
+    document.getElementById("deleteModal");
+
+  const modal =
+    bootstrap.Modal.getOrCreateInstance(
+      modalElement
+    );
+
+  modal.show();
+
+};
+
+
+confirmDeleteBtn.addEventListener(
+  "click",
+  async () => {
+
+    if (!deleteListingId) return;
+
+
+    confirmDeleteBtn.disabled = true;
+
+    confirmDeleteBtn.innerHTML = `
+      <span
+        class="spinner-border spinner-border-sm me-2"
+      ></span>
+      Deleting...
+    `;
+
+
+    try {
+
+      await deleteDoc(
+        doc(
+          db,
+          "listings",
+          deleteListingId
+        )
+      );
+
+
+      const modalElement =
+        document.getElementById("deleteModal");
+
+      const modal =
+        bootstrap.Modal.getInstance(
+          modalElement
+        );
+
+      modal.hide();
+
+
+      deleteListingId = null;
+
+      await loadListings();
+
+
+      showMessage(
+        "Listing deleted successfully.",
+        "success"
+      );
+
+    } catch (error) {
+
+      console.error(
+        "Delete error:",
+        error
+      );
+
+      alert(
+        "Unable to delete this listing. Please try again."
+      );
+
+    } finally {
+
+      confirmDeleteBtn.disabled = false;
+
+      confirmDeleteBtn.innerHTML =
+        "Delete Listing";
+
+    }
+
+  }
+);
+
+
+/* --------------------------------
+   MESSAGE
+-------------------------------- */
+
+function showMessage(message, type) {
+
+  formMessage.innerHTML = `
+    <div class="alert alert-${type} alert-dismissible fade show">
+      ${escapeHtml(message)}
+
+      <button
+        type="button"
+        class="btn-close"
+        data-bs-dismiss="alert"
+      ></button>
+    </div>
+  `;
+
+}
+
+
+/* --------------------------------
+   FIREBASE ERROR
+-------------------------------- */
+
+function getFirebaseError(error) {
+
+  if (
+    error?.code ===
+    "permission-denied"
+  ) {
+    return "Permission denied. Please check your supplier account and Firestore rules.";
+  }
+
+  if (
+    error?.code ===
+    "failed-precondition"
+  ) {
+    return "Firestore requires an index for this query. The fallback query will be used.";
+  }
+
+  if (
+    error?.code ===
+    "unavailable"
+  ) {
+    return "Firebase is temporarily unavailable. Please check your internet connection.";
+  }
+
+  return (
+    error?.message ||
+    "Something went wrong. Please try again."
+  );
+
+}
+
+
+/* --------------------------------
+   SECURITY HELPERS
+-------------------------------- */
+
+function escapeHtml(value) {
+
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+
+}
+
+
+function escapeAttribute(value) {
+
+  return escapeHtml(value);
+
+}
+
+</script>
+
+</body>
+</html>
