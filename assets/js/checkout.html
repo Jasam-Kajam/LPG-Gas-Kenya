@@ -1,0 +1,1268 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  >
+
+  <meta
+    name="description"
+    content="Secure LPG checkout on GasHubKE."
+  >
+
+  <meta
+    name="theme-color"
+    content="#f97316"
+  >
+
+  <title>Checkout | GasHubKE</title>
+
+  <link
+    rel="icon"
+    href="/assets/images/favicon.svg"
+  >
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.7/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.min.css"
+    rel="stylesheet"
+  >
+
+  <link
+    rel="stylesheet"
+    href="/assets/css/app.css"
+  >
+</head>
+
+<body>
+
+<!-- =========================================
+     NAVIGATION
+========================================= -->
+
+<nav class="navbar bg-white border-bottom sticky-top">
+
+  <div class="container py-2">
+
+    <a
+      href="/"
+      class="navbar-brand d-flex align-items-center gap-2 fw-bold"
+    >
+
+      <img
+        src="/assets/images/favicon.svg"
+        width="38"
+        height="38"
+        alt="GasHubKE"
+      >
+
+      <span>
+        GasHub<span class="text-orange">KE</span>
+      </span>
+
+    </a>
+
+    <a
+      href="/"
+      class="btn btn-outline-dark btn-sm"
+    >
+      <i class="bi bi-arrow-left"></i>
+      Marketplace
+    </a>
+
+  </div>
+
+</nav>
+
+
+<!-- =========================================
+     MAIN
+========================================= -->
+
+<main class="container py-4 py-lg-5">
+
+  <div class="row g-4">
+
+    <!-- =====================================
+         CHECKOUT FORM
+    ====================================== -->
+
+    <div class="col-lg-7">
+
+      <div class="hero-card">
+
+        <div class="mb-4">
+
+          <span class="eyebrow">
+            CHECKOUT
+          </span>
+
+          <h2 class="mt-1 mb-1">
+            Delivery details
+          </h2>
+
+          <p class="text-muted mb-0">
+            Provide the details suppliers need to deliver your gas.
+          </p>
+
+        </div>
+
+
+        <div
+          id="authNotice"
+          class="alert alert-warning d-none"
+        >
+          <i class="bi bi-person-lock"></i>
+
+          Please sign in before placing your order.
+
+          <a
+            href="/auth/login.html?next=/checkout.html"
+            class="alert-link"
+          >
+            Sign in
+          </a>
+        </div>
+
+
+        <form id="checkoutForm">
+
+          <!-- PHONE -->
+
+          <div class="mb-3">
+
+            <label
+              for="phone"
+              class="form-label fw-semibold"
+            >
+              Phone number
+            </label>
+
+            <input
+              type="tel"
+              id="phone"
+              class="form-control"
+              placeholder="07XXXXXXXX"
+              inputmode="tel"
+              autocomplete="tel"
+              required
+            >
+
+            <div class="form-text">
+              The supplier will use this number to contact you.
+            </div>
+
+          </div>
+
+
+          <!-- COUNTY -->
+
+          <div class="mb-3">
+
+            <label
+              for="county"
+              class="form-label fw-semibold"
+            >
+              County
+            </label>
+
+            <select
+              id="county"
+              class="form-select"
+              required
+            >
+
+              <option value="">
+                Select county
+              </option>
+
+            </select>
+
+          </div>
+
+
+          <!-- TOWN -->
+
+          <div class="mb-3">
+
+            <label
+              for="town"
+              class="form-label fw-semibold"
+            >
+              Town / Area
+            </label>
+
+            <input
+              type="text"
+              id="town"
+              class="form-control"
+              placeholder="e.g. Ruiru"
+              required
+            >
+
+          </div>
+
+
+          <!-- ADDRESS -->
+
+          <div class="mb-3">
+
+            <label
+              for="address"
+              class="form-label fw-semibold"
+            >
+              Delivery address / landmark
+            </label>
+
+            <textarea
+              id="address"
+              class="form-control"
+              rows="4"
+              placeholder="Enter estate, building, street or nearby landmark"
+              required
+            ></textarea>
+
+          </div>
+
+
+          <!-- DELIVERY NOTE -->
+
+          <div class="mb-3">
+
+            <label
+              for="note"
+              class="form-label fw-semibold"
+            >
+              Delivery note
+              <span class="text-muted fw-normal">
+                (optional)
+              </span>
+            </label>
+
+            <textarea
+              id="note"
+              class="form-control"
+              rows="3"
+              placeholder="Any additional instructions for the supplier?"
+            ></textarea>
+
+          </div>
+
+
+          <!-- PAYMENT -->
+
+          <div class="mb-4">
+
+            <label class="form-label fw-semibold">
+              Payment method
+            </label>
+
+            <div class="border rounded-3 p-3">
+
+              <div class="form-check">
+
+                <input
+                  class="form-check-input"
+                  type="radio"
+                  name="paymentMethod"
+                  id="mpesa"
+                  value="mpesa"
+                  checked
+                >
+
+                <label
+                  class="form-check-label"
+                  for="mpesa"
+                >
+                  <strong>M-PESA</strong>
+
+                  <span class="d-block small text-muted">
+                    M-PESA payment integration will process the payment securely.
+                  </span>
+
+                </label>
+
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- TERMS -->
+
+          <div class="form-check mb-4">
+
+            <input
+              class="form-check-input"
+              type="checkbox"
+              id="terms"
+              required
+            >
+
+            <label
+              class="form-check-label small"
+              for="terms"
+            >
+              I confirm that my delivery details are correct and
+              understand that delivery is handled by the supplier.
+            </label>
+
+          </div>
+
+
+          <!-- MESSAGE -->
+
+          <div
+            id="message"
+            class="mb-3"
+          ></div>
+
+
+          <!-- SUBMIT -->
+
+          <button
+            type="submit"
+            id="placeOrderBtn"
+            class="btn btn-orange btn-lg w-100"
+          >
+
+            <i class="bi bi-shield-check"></i>
+
+            Place order
+
+          </button>
+
+        </form>
+
+      </div>
+
+    </div>
+
+
+    <!-- =====================================
+         ORDER SUMMARY
+    ====================================== -->
+
+    <div class="col-lg-5">
+
+      <div class="hero-card">
+
+        <div class="d-flex justify-content-between align-items-center mb-3">
+
+          <h4 class="mb-0">
+            Order summary
+          </h4>
+
+          <span
+            id="itemCount"
+            class="badge text-bg-light"
+          >
+            0 items
+          </span>
+
+        </div>
+
+
+        <div id="summary"></div>
+
+
+        <hr>
+
+
+        <div class="d-flex justify-content-between mb-2">
+
+          <span>
+            Subtotal
+          </span>
+
+          <strong>
+            KES <span id="subtotal">0</span>
+          </strong>
+
+        </div>
+
+
+        <div class="d-flex justify-content-between mb-2">
+
+          <span>
+            Delivery fee
+          </span>
+
+          <strong>
+            Supplier
+          </strong>
+
+        </div>
+
+        <div class="small text-muted mb-3">
+          GasHubKE does not add a platform delivery fee.
+          Delivery arrangements are made with the supplier.
+        </div>
+
+
+        <div class="d-flex justify-content-between fs-5">
+
+          <strong>
+            Total
+          </strong>
+
+          <strong class="text-orange">
+            KES <span id="total">0</span>
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <!-- SECURITY -->
+
+      <div class="hero-card mt-3">
+
+        <div class="d-flex gap-3">
+
+          <i
+            class="bi bi-shield-check text-orange"
+            style="font-size:1.8rem"
+          ></i>
+
+          <div>
+
+            <strong>
+              Secure checkout
+            </strong>
+
+            <p class="small text-muted mb-0">
+              Your order information is securely stored in
+              GasHubKE's Firebase database.
+            </p>
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</main>
+
+
+<!-- =========================================
+     SUCCESS MODAL
+========================================= -->
+
+<div
+  class="modal fade"
+  id="successModal"
+  tabindex="-1"
+  aria-hidden="true"
+>
+
+  <div class="modal-dialog modal-dialog-centered">
+
+    <div class="modal-content">
+
+      <div class="modal-body text-center p-4">
+
+        <div
+          class="mx-auto mb-3 d-flex align-items-center justify-content-center"
+          style="
+            width:70px;
+            height:70px;
+            border-radius:50%;
+            background:#ecfdf5;
+            color:#059669;
+            font-size:2rem;
+          "
+        >
+
+          <i class="bi bi-check-lg"></i>
+
+        </div>
+
+        <h4>
+          Order placed successfully
+        </h4>
+
+        <p class="text-muted">
+          Your order has been submitted to the supplier.
+        </p>
+
+        <a
+          href="/orders/"
+          class="btn btn-orange"
+        >
+          View my orders
+        </a>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- =========================================
+     JAVASCRIPT
+========================================= -->
+
+<script type="module">
+
+import {
+  auth,
+  db,
+  collection,
+  addDoc,
+  serverTimestamp,
+  onAuthStateChanged
+} from "/assets/js/firebase.js";
+
+import {
+  COUNTIES
+} from "/assets/js/config.js";
+
+
+/* =========================================
+   HELPERS
+========================================= */
+
+const $ = (selector) =>
+  document.querySelector(selector);
+
+
+function money(value) {
+
+  return new Intl.NumberFormat(
+    "en-KE"
+  ).format(
+    Number(value) || 0
+  );
+
+}
+
+
+function esc(value) {
+
+  return String(value ?? "")
+    .replace(
+      /[&<>"']/g,
+      (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }[character])
+    );
+
+}
+
+
+/*
+  Convert Kenyan phone numbers to
+  254XXXXXXXXX format.
+*/
+function normalizePhone(phone) {
+
+  let value =
+    String(phone || "")
+      .replace(/\s+/g, "")
+      .replace(/-/g, "");
+
+  if (value.startsWith("+254")) {
+    return value.substring(1);
+  }
+
+  if (value.startsWith("254")) {
+    return value;
+  }
+
+  if (
+    value.startsWith("07") ||
+    value.startsWith("01")
+  ) {
+
+    return "254" + value.substring(1);
+
+  }
+
+  return value;
+
+}
+
+
+/* =========================================
+   LOAD COUNTIES
+========================================= */
+
+COUNTIES.forEach((county) => {
+
+  $("#county").insertAdjacentHTML(
+    "beforeend",
+    `
+      <option value="${esc(county)}">
+        ${esc(county)}
+      </option>
+    `
+  );
+
+});
+
+
+/* =========================================
+   LOAD CART
+========================================= */
+
+const cart = JSON.parse(
+  localStorage.getItem(
+    "gashubke_cart"
+  ) || "[]"
+);
+
+
+/* =========================================
+   EMPTY CART CHECK
+========================================= */
+
+if (!cart.length) {
+
+  $("#summary").innerHTML = `
+    <div class="text-center py-4 text-muted">
+
+      <i
+        class="bi bi-cart-x"
+        style="font-size:2.5rem"
+      ></i>
+
+      <p class="mt-2 mb-3">
+        Your cart is empty.
+      </p>
+
+      <a
+        href="/"
+        class="btn btn-orange"
+      >
+        Browse marketplace
+      </a>
+
+    </div>
+  `;
+
+  $("#placeOrderBtn").disabled = true;
+
+}
+
+
+/* =========================================
+   RENDER SUMMARY
+========================================= */
+
+function renderSummary() {
+
+  if (!cart.length) return;
+
+
+  let subtotal = 0;
+
+  let totalItems = 0;
+
+
+  $("#summary").innerHTML =
+    cart.map((item) => {
+
+      const listing =
+        item.product || {};
+
+      const quantity =
+        Number(item.quantity) || 1;
+
+      const price =
+        Number(listing.price) || 0;
+
+      const itemTotal =
+        price * quantity;
+
+      subtotal += itemTotal;
+
+      totalItems += quantity;
+
+
+      return `
+        <div
+          class="border-bottom py-3"
+        >
+
+          <div
+            class="d-flex justify-content-between gap-3"
+          >
+
+            <div>
+
+              <strong>
+                ${esc(
+                  listing.title ||
+                  "LPG Gas"
+                )}
+              </strong>
+
+              <div class="small text-muted">
+
+                ${esc(
+                  listing.category ||
+                  "Cooking Gas"
+                )}
+
+                ${
+                  listing.size
+                    ? ` · ${esc(listing.size)}`
+                    : ""
+                }
+
+              </div>
+
+              <div class="small text-muted">
+
+                <i class="bi bi-shop"></i>
+
+                ${esc(
+                  listing.vendorName ||
+                  "Gas Supplier"
+                )}
+
+              </div>
+
+            </div>
+
+            <div class="text-end">
+
+              <strong>
+                KES ${money(itemTotal)}
+              </strong>
+
+              <div class="small text-muted">
+                ${quantity} × KES ${money(price)}
+              </div>
+
+            </div>
+
+          </div>
+
+        </div>
+      `;
+
+    }).join("");
+
+
+  $("#itemCount").textContent =
+    `${totalItems} item${
+      totalItems === 1 ? "" : "s"
+    }`;
+
+
+  $("#subtotal").textContent =
+    money(subtotal);
+
+
+  $("#total").textContent =
+    money(subtotal);
+
+}
+
+
+renderSummary();
+
+
+/* =========================================
+   AUTH STATE
+========================================= */
+
+let currentUser = null;
+
+
+onAuthStateChanged(
+  auth,
+  (user) => {
+
+    currentUser = user;
+
+
+    if (!user) {
+
+      $("#authNotice")
+        .classList
+        .remove("d-none");
+
+      $("#placeOrderBtn").disabled = true;
+
+    } else {
+
+      $("#authNotice")
+        .classList
+        .add("d-none");
+
+      $("#placeOrderBtn").disabled =
+        cart.length === 0;
+
+    }
+
+  }
+);
+
+
+/* =========================================
+   SUBMIT ORDER
+========================================= */
+
+$("#checkoutForm")
+  .addEventListener(
+    "submit",
+    async (event) => {
+
+      event.preventDefault();
+
+
+      /* -----------------------------------
+         AUTHENTICATION
+      ----------------------------------- */
+
+      if (!currentUser) {
+
+        location.href =
+          "/auth/login.html?next=/checkout.html";
+
+        return;
+
+      }
+
+
+      /* -----------------------------------
+         CART
+      ----------------------------------- */
+
+      if (!cart.length) {
+
+        showMessage(
+          "Your cart is empty.",
+          "danger"
+        );
+
+        return;
+
+      }
+
+
+      /* -----------------------------------
+         PHONE
+      ----------------------------------- */
+
+      const phone =
+        normalizePhone(
+          $("#phone").value
+        );
+
+
+      if (
+        !/^254(7|1)\d{8}$/.test(phone)
+      ) {
+
+        showMessage(
+          "Please enter a valid Kenyan phone number.",
+          "danger"
+        );
+
+        $("#phone").focus();
+
+        return;
+
+      }
+
+
+      /* -----------------------------------
+         FORM VALUES
+      ----------------------------------- */
+
+      const county =
+        $("#county").value.trim();
+
+      const town =
+        $("#town").value.trim();
+
+      const address =
+        $("#address").value.trim();
+
+      const note =
+        $("#note").value.trim();
+
+
+      if (
+        !county ||
+        !town ||
+        !address
+      ) {
+
+        showMessage(
+          "Please complete your delivery details.",
+          "danger"
+        );
+
+        return;
+
+      }
+
+
+      /* -----------------------------------
+         DISABLE BUTTON
+      ----------------------------------- */
+
+      const button =
+        $("#placeOrderBtn");
+
+      button.disabled = true;
+
+      button.innerHTML = `
+        <span
+          class="spinner-border spinner-border-sm me-2"
+          aria-hidden="true"
+        ></span>
+
+        Processing order...
+      `;
+
+
+      try {
+
+        /*
+          Group cart items by supplier.
+
+          This is important because one cart
+          can contain gas from different suppliers.
+        */
+
+        const supplierGroups = {};
+
+
+        cart.forEach((item) => {
+
+          const listing =
+            item.product || {};
+
+          const supplierId =
+            listing.vendorId ||
+            "unknown-supplier";
+
+
+          if (!supplierGroups[supplierId]) {
+
+            supplierGroups[supplierId] = [];
+
+          }
+
+
+          supplierGroups[supplierId]
+            .push(item);
+
+        });
+
+
+        const createdOrders = [];
+
+
+        /* -----------------------------------
+           CREATE ONE ORDER PER SUPPLIER
+        ----------------------------------- */
+
+        for (
+          const supplierId
+          of Object.keys(supplierGroups)
+        ) {
+
+          const supplierItems =
+            supplierGroups[supplierId];
+
+
+          let supplierTotal = 0;
+
+
+          const items =
+            supplierItems.map(
+              (item) => {
+
+                const listing =
+                  item.product || {};
+
+                const quantity =
+                  Number(item.quantity) || 1;
+
+                const price =
+                  Number(listing.price) || 0;
+
+                const itemTotal =
+                  price * quantity;
+
+
+                supplierTotal +=
+                  itemTotal;
+
+
+                return {
+
+                  /*
+                    Existing listing identity
+                  */
+
+                  listingId:
+                    item.id || null,
+
+                  title:
+                    listing.title ||
+                    "LPG Gas",
+
+                  category:
+                    listing.category ||
+                    "Cooking Gas",
+
+                  description:
+                    listing.description ||
+                    "",
+
+                  size:
+                    listing.size ||
+                    "",
+
+                  price,
+
+                  quantity,
+
+                  itemTotal,
+
+
+                  /*
+                    Supplier information
+                  */
+
+                  vendorId:
+                    listing.vendorId ||
+                    supplierId,
+
+                  vendorName:
+                    listing.vendorName ||
+                    "Gas Supplier",
+
+                  /*
+                    Original marketplace
+                    location
+                  */
+
+                  listingLocation:
+                    listing.location ||
+                    ""
+
+                };
+
+              }
+            );
+
+
+          /*
+            Create the Firestore order.
+          */
+
+          const orderData = {
+
+            /* Customer */
+
+            customerId:
+              currentUser.uid,
+
+            customerEmail:
+              currentUser.email || "",
+
+
+            /* Supplier */
+
+            supplierId,
+
+            supplierName:
+              items[0]?.vendorName ||
+              "Gas Supplier",
+
+
+            /* Items */
+
+            items,
+
+
+            /* Financial */
+
+            subtotal:
+              supplierTotal,
+
+            deliveryFee:
+              0,
+
+            total:
+              supplierTotal,
+
+
+            /* Delivery */
+
+            phone,
+
+            county,
+
+            town,
+
+            address,
+
+            deliveryNote:
+              note,
+
+
+            /* Payment */
+
+            paymentMethod:
+              "mpesa",
+
+            paymentStatus:
+              "pending",
+
+
+            /* Order status */
+
+            status:
+              "pending",
+
+
+            /* Source */
+
+            source:
+              "gashubke-marketplace",
+
+
+            /* Timestamp */
+
+            createdAt:
+              serverTimestamp()
+
+          };
+
+
+          const orderRef =
+            await addDoc(
+              collection(db, "orders"),
+              orderData
+            );
+
+
+          createdOrders.push(
+            orderRef.id
+          );
+
+        }
+
+
+        /* -----------------------------------
+           CLEAR CART
+        ----------------------------------- */
+
+        localStorage.removeItem(
+          "gashubke_cart"
+        );
+
+
+        /* -----------------------------------
+           SHOW SUCCESS
+        ----------------------------------- */
+
+        const modal =
+          bootstrap.Modal
+            .getOrCreateInstance(
+              $("#successModal")
+            );
+
+
+        modal.show();
+
+
+        /*
+          Give Firebase a moment before
+          allowing navigation.
+        */
+
+        setTimeout(() => {
+
+          location.href =
+            "/orders/";
+
+        }, 1800);
+
+
+      } catch (error) {
+
+        console.error(
+          "Order creation failed:",
+          error
+        );
+
+
+        showMessage(
+          error.message ||
+          "We could not place your order. Please try again.",
+          "danger"
+        );
+
+
+        button.disabled = false;
+
+        button.innerHTML = `
+          <i class="bi bi-shield-check"></i>
+
+          Place order
+        `;
+
+      }
+
+    }
+  );
+
+
+/* =========================================
+   MESSAGE
+========================================= */
+
+function showMessage(
+  message,
+  type = "info"
+) {
+
+  $("#message").innerHTML = `
+
+    <div
+      class="alert alert-${type}"
+      role="alert"
+    >
+
+      ${esc(message)}
+
+    </div>
+
+  `;
+
+}
+</script>
+
+</body>
+</html>
